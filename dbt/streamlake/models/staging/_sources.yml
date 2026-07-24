@@ -1,0 +1,38 @@
+version: 2
+
+sources:
+  - name: lakehouse
+    description: >
+      Tables the lakehouse exported into the warehouse. These are loaded by
+      `streamlake warehouse-load`, which reconciles row counts against the export manifest, so
+      dbt can treat them as trustworthy inputs — the contract engine has already run on the
+      Iceberg tables they came from.
+    schema: "{{ var('raw_schema') }}"
+    tables:
+      - name: trips
+        description: One row per trip, post-quarantine and post-dedup (silver).
+        columns:
+          - name: trip_id
+            description: SHA-256 surrogate key, stable across batch and stream.
+            data_tests: [unique, not_null]
+          - name: pickup_ts
+            data_tests: [not_null]
+          - name: total_amount
+            data_tests: [not_null]
+
+      - name: dim_zone
+        description: TLC taxi zone lookup, conformed.
+        columns:
+          - name: location_id
+            data_tests: [unique, not_null]
+
+      - name: daily_zone_kpis
+        description: >
+          Spark's own daily aggregation. dbt rebuilds the same numbers independently in
+          fct_trip_daily_zone; the two are compared by tests/assert_batch_spark_dbt_parity.sql.
+
+      - name: hourly_demand
+        description: Spark's hourly borough aggregation.
+
+      - name: payment_mix
+        description: Daily payment-type split.

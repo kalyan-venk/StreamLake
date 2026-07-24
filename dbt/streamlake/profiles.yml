@@ -1,0 +1,25 @@
+# Checked in on purpose: it contains no secrets, only env_var lookups.
+# Run from the repo root:
+#   dbt build --project-dir dbt/streamlake --profiles-dir dbt/streamlake
+streamlake:
+  target: "{{ env_var('DBT_TARGET', 'duckdb') }}"
+  outputs:
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('STREAMLAKE_DUCKDB', 'data/warehouse/streamlake.duckdb') }}"
+      schema: analytics
+      threads: 4
+
+    # Same models, same tests, different engine. Set DBT_TARGET=snowflake plus the
+    # SNOWFLAKE_* variables from .env.example.
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT', '') }}"
+      user: "{{ env_var('SNOWFLAKE_USER', '') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD', '') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'ACCOUNTADMIN') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'STREAMLAKE') }}"
+      schema: ANALYTICS
+      threads: 4
+      client_session_keep_alive: false

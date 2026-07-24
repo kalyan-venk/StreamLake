@@ -1,0 +1,91 @@
+version: 2
+
+models:
+  - name: dim_zone
+    description: Conformed taxi-zone dimension with a coarse zone class for the dashboard.
+    columns:
+      - name: location_id
+        description: TLC zone id; the join key for every fact table.
+        data_tests:
+          - unique
+          - not_null
+      - name: borough
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island", "EWR", "Unknown", "N/A"]
+      - name: zone_class
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Airport", "Core", "Outer"]
+
+  - name: fct_trip_daily_zone
+    description: >
+      Trips, revenue and service quality per pickup zone per day. Recomputed in warehouse SQL
+      from stg_trips so it can be reconciled against Spark's gold table.
+    data_tests:
+      # The grain assertion. dbt ships no multi-column uniqueness test, so this is the local
+      # generic test in macros/generic_tests.sql.
+      - unique_combination:
+          arguments:
+            columns: ["pickup_date", "pickup_borough", "pickup_zone"]
+    columns:
+      - name: pickup_date
+        data_tests: [not_null]
+      - name: pickup_zone
+        data_tests: [not_null]
+      - name: trips
+        data_tests:
+          - not_null
+          - positive_values
+      - name: revenue
+        data_tests: [not_null]
+      - name: card_share_pct
+        data_tests:
+          - percentage_range
+
+  - name: fct_hourly_demand
+    description: Trips and revenue by borough and hour, with each hour's share of its day.
+    data_tests:
+      - unique_combination:
+          arguments:
+            columns: ["pickup_date", "pickup_hour", "pickup_borough"]
+    columns:
+      - name: pickup_hour
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+                quote: false
+      - name: trips
+        data_tests: [not_null, positive_values]
+      - name: share_of_borough_day_pct
+        data_tests: [percentage_range]
+
+  - name: mart_borough_summary
+    description: One row per borough for the whole loaded period; the dashboard headline table.
+    columns:
+      - name: pickup_borough
+        data_tests: [unique, not_null]
+      - name: trip_share_pct
+        data_tests: [percentage_range]
+      - name: revenue_share_pct
+        data_tests: [percentage_range]
+
+  - name: mart_data_freshness
+    description: >
+      Per-table watermark and lag against the end of the loaded period. This is the model the
+      dashboard's freshness page reads, and the one that makes a stalled pipeline visible.
+    columns:
+      - name: table_name
+        data_tests: [unique, not_null]
+      - name: watermark_ts
+        data_tests: [not_null]
+      - name: freshness_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["fresh", "stale", "breached"]
