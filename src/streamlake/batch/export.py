@@ -74,6 +74,28 @@ def run(cfg: Config | None = None) -> dict[str, int]:
         manifest[name] = entry
         log.info("exported %-16s %9d rows -> %s", name, row_count, target)
 
+    # The quarantine table is exported as a *summary*, not row by row: the warehouse needs to
+    # answer "what did we reject and why", not to store every rejected trip a second time.
+    quarantine = cfg.table("silver", "trips_quarantine")
+    if spark.catalog.tableExists(quarantine):
+        reasons = (
+            spark.table(quarantine)
+            .groupBy("reject_reason")
+            .agg(F.count(F.lit(1)).alias("rows"))
+            .orderBy(F.desc("rows"))
+        )
+        target = cfg.curated_dir("quarantine_reasons")
+        reasons.coalesce(1).write.mode("overwrite").parquet(str(target))
+        row_count = reasons.count()
+        counts["quarantine_reasons"] = row_count
+        manifest["quarantine_reasons"] = {
+            "source_table": quarantine,
+            "path": str(target),
+            "row_count": row_count,
+            "columns": 2,
+        }
+        log.info("exported %-16s %9d rows -> %s", "quarantine_reasons", row_count, target)
+
     manifest_path = curated_root / "_export_manifest.json"
     manifest_path.write_text(
         json.dumps(

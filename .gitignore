@@ -2,7 +2,7 @@
 data/
 warehouse/
 _reports/
-dashboard/build/
+
 logs/
 checkpoints/
 spark-warehouse/

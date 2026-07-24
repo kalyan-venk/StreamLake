@@ -151,6 +151,16 @@ checks:
       impossible speed, and that is a data-quality signal worth surfacing — but it is not a
       reason to stop the pipeline.
 
+  - type: accepted_range
+    column: tip_pct
+    min: 0
+    max: 100
+    severity: warn
+    description: >
+      A tip larger than the fare is legal but rare. Warning-level because it is a signal about
+      the vendor feed, not a reason to stop the pipeline — and it explains the one borough on
+      the dashboard with an implausible average tip.
+
   - type: accepted_values
     column: payment_type
     values: [0, 1, 2, 3, 4, 5, 6]
