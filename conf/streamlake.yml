@@ -1,0 +1,89 @@
+# StreamLake pipeline configuration.
+# ${VAR:default} is expanded from the environment at load time (see streamlake/config.py),
+# so every deployment knob is overridable without editing this file.
+
+project: streamlake
+environment: ${STREAMLAKE_ENV:local}
+
+paths:
+  raw: data/raw
+  curated: data/curated
+  reports: _reports
+  checkpoints: checkpoints
+  warehouse_db: data/warehouse/streamlake.duckdb
+
+dataset:
+  name: nyc_yellow_taxi
+  # NYC TLC publishes one parquet file per month; the pipeline is month-partitioned.
+  month: ${STREAMLAKE_MONTH:2024-01}
+  trips_url: https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_{month}.parquet
+  zones_url: https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv
+
+lakehouse:
+  catalog: lakehouse
+  # hadoop  -> catalog metadata lives next to the data (local FS or S3), zero services
+  # rest    -> external Iceberg REST catalog (set ICEBERG_URI)
+  type: ${ICEBERG_CATALOG_TYPE:hadoop}
+  warehouse: ${ICEBERG_WAREHOUSE:warehouse}
+  uri: ${ICEBERG_URI:}
+  # Set these to point the same code at MinIO or real S3 (see docs/RUNBOOK.md).
+  s3:
+    endpoint: ${AWS_S3_ENDPOINT:}
+    path_style_access: ${AWS_S3_PATH_STYLE:true}
+  namespaces:
+    bronze: bronze
+    silver: silver
+    gold: gold
+    stream: stream
+
+spark:
+  app_name: streamlake
+  master: ${SPARK_MASTER:local[*]}
+  # Resolved from Maven on first run and cached in ~/.ivy2.
+  packages:
+    - org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.11.0
+  streaming_packages:
+    - org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.4
+  conf:
+    spark.sql.session.timeZone: UTC
+    spark.sql.shuffle.partitions: "8"
+    spark.driver.memory: ${SPARK_DRIVER_MEMORY:4g}
+    spark.ui.showConsoleProgress: "false"
+    spark.sql.adaptive.enabled: "true"
+
+kafka:
+  bootstrap_servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+  topic: ${KAFKA_TOPIC:streamlake.trips}
+  producer:
+    # Replay speed: how many source trips to publish per second.
+    events_per_second: ${PRODUCER_EPS:400}
+    max_events: ${PRODUCER_MAX_EVENTS:20000}
+    # Fraction of events deliberately re-sent, to prove the consumer's dedup works.
+    duplicate_rate: ${PRODUCER_DUP_RATE:0.05}
+    # Fraction of events emitted with a delayed timestamp, to exercise the watermark.
+    late_rate: ${PRODUCER_LATE_RATE:0.03}
+
+stream:
+  window_duration: 1 minute
+  watermark_delay: 2 minutes
+  trigger_interval: 10 seconds
+  # Streaming run stops itself after this long so `make stream` is CI-able.
+  run_seconds: ${STREAM_RUN_SECONDS:120}
+
+contracts:
+  dir: conf/contracts
+  # 'fail' aborts the task (and therefore the Airflow DAG); 'warn' only records the breach.
+  on_violation: ${CONTRACT_MODE:fail}
+
+warehouse:
+  # duckdb (default, zero-cost) or snowflake (set SNOWFLAKE_* env vars)
+  target: ${WAREHOUSE_TARGET:duckdb}
+  schema_raw: streamlake_raw
+  snowflake:
+    account: ${SNOWFLAKE_ACCOUNT:}
+    user: ${SNOWFLAKE_USER:}
+    password: ${SNOWFLAKE_PASSWORD:}
+    role: ${SNOWFLAKE_ROLE:ACCOUNTADMIN}
+    warehouse: ${SNOWFLAKE_WAREHOUSE:COMPUTE_WH}
+    database: ${SNOWFLAKE_DATABASE:STREAMLAKE}
+    schema: ${SNOWFLAKE_SCHEMA:RAW}

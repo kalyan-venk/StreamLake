@@ -1,0 +1,30 @@
+name: silver_dim_zone
+dataset: lakehouse.silver.dim_zone
+layer: silver
+owner: data-platform
+description: >
+  The conformed zone dimension every mart joins to. Its contract is a uniqueness contract: if
+  location_id stops being unique, every downstream join fans out and trip counts inflate without
+  a single job failing.
+
+schema:
+  strict: true
+  columns:
+    - name: location_id
+      type: int
+      nullable: false
+    - name: borough
+      type: string
+      nullable: false
+    - name: zone
+      type: string
+    - name: service_zone
+      type: string
+
+checks:
+  - type: unique
+    columns: [location_id]
+    description: the join key — a duplicate here silently multiplies every fact row
+  - type: row_count
+    min: 200
+    max: 400

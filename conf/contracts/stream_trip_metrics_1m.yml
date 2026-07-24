@@ -1,0 +1,51 @@
+name: stream_trip_metrics_1m
+dataset: lakehouse.stream.trip_metrics_1m
+layer: stream
+owner: data-platform
+description: >
+  Per-minute windowed KPIs from the Kafka arm. Streaming contracts are checked per micro-batch,
+  inside foreachBatch, before the batch is committed — which is the streaming equivalent of
+  "fail before anyone downstream trusts it". Freshness here IS wall-clock: a stream that stops
+  advancing is the failure mode you actually care about.
+
+schema:
+  strict: true
+  columns:
+    - name: window_start
+      type: timestamp
+      nullable: false
+    - name: window_end
+      type: timestamp
+      nullable: false
+    - name: pickup_borough
+      type: string
+      nullable: false
+    - name: trips
+      type: bigint
+      nullable: false
+    - name: passengers
+      type: bigint
+    - name: revenue
+      type: double
+      nullable: false
+    - name: avg_fare
+      type: double
+    - name: avg_distance_mi
+      type: double
+    - name: updated_at
+      type: timestamp
+      nullable: false
+
+checks:
+  - type: unique
+    columns: [window_start, pickup_borough]
+    description: >
+      One row per window per borough. This is the assertion that proves the dedup worked: with
+      at-least-once delivery and no dedup, a replayed event lands in a second row for the same
+      window.
+  - type: expression
+    expr: window_end > window_start
+  - type: expression
+    expr: trips > 0
+  - type: row_count
+    min: 1

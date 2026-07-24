@@ -1,0 +1,36 @@
+name: gold_hourly_demand
+dataset: lakehouse.gold.hourly_demand
+layer: gold
+owner: analytics
+description: >
+  Hourly demand by borough — the batch counterpart to the streaming per-minute table. Keeping
+  both lets the dashboard show the same KPI computed two ways, which is how you notice one arm
+  drifting.
+
+schema:
+  strict: true
+  columns:
+    - name: pickup_hour_ts
+      type: timestamp
+      nullable: false
+    - name: pickup_borough
+      type: string
+      nullable: false
+    - name: trips
+      type: bigint
+      nullable: false
+    - name: revenue
+      type: double
+      nullable: false
+    - name: avg_duration_min
+      type: double
+
+checks:
+  - type: unique
+    columns: [pickup_hour_ts, pickup_borough]
+    description: one row per borough-hour
+  - type: row_count
+    min: 100
+    max: 100000
+  - type: expression
+    expr: trips > 0

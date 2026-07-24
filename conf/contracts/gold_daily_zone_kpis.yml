@@ -1,0 +1,60 @@
+name: gold_daily_zone_kpis
+dataset: lakehouse.gold.daily_zone_kpis
+layer: gold
+owner: analytics
+description: >
+  The lake-side serving table behind the dashboard's zone view. Aggregates hide problems well —
+  a mart with a duplicated grain still renders a perfectly convincing chart — so the grain
+  assertion is the important one here.
+
+schema:
+  strict: true
+  columns:
+    - name: pickup_date
+      type: date
+      nullable: false
+    - name: pickup_borough
+      type: string
+      nullable: false
+    - name: pickup_zone
+      type: string
+      nullable: false
+    - name: trips
+      type: bigint
+      nullable: false
+    - name: passengers
+      type: bigint
+    - name: revenue
+      type: double
+      nullable: false
+    - name: avg_fare
+      type: double
+    - name: avg_distance_mi
+      type: double
+    - name: avg_duration_min
+      type: double
+    - name: avg_speed_mph
+      type: double
+    - name: avg_tip_pct
+      type: double
+    - name: revenue_per_trip
+      type: double
+
+checks:
+  - type: unique
+    columns: [pickup_date, pickup_borough, pickup_zone]
+    description: the declared grain — one row per zone per day, or the KPIs double-count
+  - type: row_count
+    min: 1000
+    max: 500000
+  - type: expression
+    expr: trips > 0
+    description: an aggregate row with zero trips means the group-by produced a phantom key
+  - type: expression
+    expr: revenue >= 0
+  - type: expression
+    expr: revenue_per_trip >= 0 AND revenue_per_trip < 10000
+    severity: warn
+  - type: freshness
+    column: pickup_date
+    max_age: 3 days

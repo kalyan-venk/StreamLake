@@ -1,0 +1,42 @@
+# data + build artifacts (regenerate with `make`)
+data/
+warehouse/
+_reports/
+dashboard/build/
+logs/
+checkpoints/
+spark-warehouse/
+derby.log
+metastore_db/
+
+# python
+.venv/
+.venv-airflow/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# dbt
+dbt/streamlake/target/
+dbt/streamlake/dbt_packages/
+dbt/streamlake/logs/
+*.duckdb
+*.duckdb.wal
+
+# airflow
+airflow/home/
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# secrets / local env
+.env
+*.pem
+
+# os
+.DS_Store
