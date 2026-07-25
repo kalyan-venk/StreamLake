@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -69,7 +69,7 @@ def run(cfg: Config | None = None, *, force: bool = False) -> dict[str, str]:
     manifest = {
         "dataset": cfg.get("dataset.name"),
         "month": cfg.month,
-        "ingested_at": datetime.now(timezone.utc).isoformat(),
+        "ingested_at": datetime.now(UTC).isoformat(),
         "files": {
             name: {
                 "path": str(path),

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: streamlake-consumer
+  namespace: streamlake
+spec:
+  selector:
+    app.kubernetes.io/name: streamlake
+    app.kubernetes.io/component: stream-consumer
+  ports:
+    - name: spark-ui
+      port: 4040
+      targetPort: 4040

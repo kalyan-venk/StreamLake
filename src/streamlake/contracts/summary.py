@@ -9,7 +9,7 @@ which are the runs where it matters.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -43,9 +43,7 @@ def load_latest_reports(cfg: Config | None = None) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             log.warning("skipping unreadable report: %s", path)
 
-    reports.sort(
-        key=lambda r: (ORDER.index(r["contract"]) if r["contract"] in ORDER else len(ORDER))
-    )
+    reports.sort(key=lambda r: ORDER.index(r["contract"]) if r["contract"] in ORDER else len(ORDER))
     return reports
 
 
@@ -61,7 +59,7 @@ def summarise(cfg: Config | None = None) -> dict[str, Any]:
     ]
 
     summary = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "contracts": len(reports),
         "checks": sum(r["checks_total"] for r in reports),
         "checks_failed": len(failed_checks),

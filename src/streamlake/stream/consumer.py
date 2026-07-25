@@ -24,7 +24,7 @@ The four things this file exists to demonstrate, in the order they appear:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from streamlake.config import Config, get_config
 from streamlake.contracts import enforce
@@ -175,7 +175,7 @@ def make_batch_writer(cfg: Config, table: str):
                 "stream_trip_metrics_1m",
                 cfg=cfg,
                 stage=f"stream/batch-{batch_id}",
-                as_of=datetime.now(timezone.utc),
+                as_of=datetime.now(UTC),
             )
 
             stamped.createOrReplaceTempView("streamlake_micro_batch")
@@ -231,9 +231,14 @@ def run(cfg: Config | None = None, *, run_seconds: int | None = None) -> dict[st
         .start()
     )
 
-    # A bounded run so the same code is usable from a Makefile, a test, and Airflow. A real
-    # deployment calls awaitTermination() with no timeout.
-    query.awaitTermination(seconds)
+    # A bounded run keeps the same code usable from a Makefile, a test, and an Airflow task.
+    # In Kubernetes STREAM_RUN_SECONDS is 0, which means "run until something stops you" — the
+    # Deployment is the supervisor there, not a timer.
+    if seconds > 0:
+        query.awaitTermination(seconds)
+    else:
+        log.info("run_seconds=0 — running until terminated")
+        query.awaitTermination()
     progress = query.lastProgress
     query.stop()
 

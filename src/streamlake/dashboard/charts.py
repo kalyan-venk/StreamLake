@@ -77,7 +77,7 @@ def hbar(
         length = max(2, (value / scale) * bar_width)
         parts.append(
             f'<g class="bar-row"><title>{escape(str(label))}: '
-            f'{value_format.format(value)}{escape(unit)}</title>'
+            f"{value_format.format(value)}{escape(unit)}</title>"
             f'<text x="{label_width - 8}" y="{y + 15}" text-anchor="end" class="cat-label">'
             f"{escape(str(label))}</text>"
             # 4px rounded data-end, anchored flat to the baseline.
@@ -129,7 +129,10 @@ def multiline(
     for tick in range(5):
         value = y_top * tick / 4
         y = y_at(value)
-        parts.append(f'<line x1="{pad_left}" y1="{y:.1f}" x2="{pad_left + plot_w}" y2="{y:.1f}" class="grid" />')
+        parts.append(
+            f'<line x1="{pad_left}" y1="{y:.1f}" x2="{pad_left + plot_w}" '
+            f'y2="{y:.1f}" class="grid" />'
+        )
         parts.append(
             f'<text x="{pad_left - 8}" y="{y + 4:.1f}" text-anchor="end" class="axis-label">'
             f"{compact(value)}</text>"
@@ -159,7 +162,8 @@ def multiline(
 
     if y_label:
         parts.append(
-            f'<text x="{pad_left - 46}" y="{pad_top - 12}" class="axis-title">{escape(y_label)}</text>'
+            f'<text x="{pad_left - 46}" y="{pad_top - 12}" class="axis-title">'
+            f"{escape(y_label)}</text>"
         )
     parts.append("</svg>")
     return "".join(parts)
@@ -181,7 +185,7 @@ def stacked_bar(
         share = 100 * value / total
         slot = index % len(SERIES_LIGHT)
         parts.append(
-            f'<g><title>{escape(name)}: {_fmt(value)} ({share:.1f}%)</title>'
+            f"<g><title>{escape(name)}: {_fmt(value)} ({share:.1f}%)</title>"
             f'<rect x="{x:.1f}" y="0" width="{seg_w:.1f}" height="20" rx="4" '
             f'class="bar series-fill-{slot}" /></g>'
         )

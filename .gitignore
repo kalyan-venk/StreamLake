@@ -40,3 +40,6 @@ airflow/home/
 
 # os
 .DS_Store
+
+# airflow local metadata db
+airflow/home/

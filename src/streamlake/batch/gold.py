@@ -46,9 +46,7 @@ def run(cfg: Config | None = None) -> dict[str, int]:
             F.round(F.avg("avg_speed_mph"), 3).alias("avg_speed_mph"),
             F.round(F.avg("tip_pct"), 3).alias("avg_tip_pct"),
         )
-        .withColumn(
-            "revenue_per_trip", F.round(F.col("revenue") / F.col("trips"), 3)
-        )
+        .withColumn("revenue_per_trip", F.round(F.col("revenue") / F.col("trips"), 3))
     )
     _write(daily_zone, cfg.table("gold", DAILY_ZONE_KPIS), partition=P.months("pickup_date"))
 
@@ -72,9 +70,7 @@ def run(cfg: Config | None = None) -> dict[str, int]:
         )
         .withColumn(
             "trip_share",
-            F.round(
-                F.col("trips") / F.sum("trips").over(Window.partitionBy("pickup_date")), 4
-            ),
+            F.round(F.col("trips") / F.sum("trips").over(Window.partitionBy("pickup_date")), 4),
         )
     )
     _write(payment, cfg.table("gold", PAYMENT_MIX))
@@ -88,7 +84,9 @@ def run(cfg: Config | None = None) -> dict[str, int]:
         stage="gold",
         as_of=as_of(cfg),
     )
-    enforce(spark.table(cfg.table("gold", HOURLY_DEMAND)), "gold_hourly_demand", cfg=cfg, stage="gold")
+    enforce(
+        spark.table(cfg.table("gold", HOURLY_DEMAND)), "gold_hourly_demand", cfg=cfg, stage="gold"
+    )
 
     counts = {
         DAILY_ZONE_KPIS: spark.table(cfg.table("gold", DAILY_ZONE_KPIS)).count(),

@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars to override defaults.
+kube_context    = "kind-streamlake"
+image           = "streamlake/stream:local"
+kafka_bootstrap = "kafka.streamlake.svc.cluster.local:9092"
+contract_mode   = "fail"

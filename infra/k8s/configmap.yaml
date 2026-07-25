@@ -1,0 +1,17 @@
+# The pipeline config, mounted rather than baked into the image, so the same image runs in
+# every environment and a config change does not need a rebuild.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streamlake-env
+  namespace: streamlake
+data:
+  KAFKA_BOOTSTRAP: "kafka.streamlake.svc.cluster.local:9092"
+  KAFKA_TOPIC: "streamlake.trips"
+  ICEBERG_CATALOG_TYPE: "hadoop"
+  ICEBERG_WAREHOUSE: "/data/warehouse"
+  CONTRACT_MODE: "fail"
+  STREAM_RUN_SECONDS: "0"      # 0 = run forever; the Deployment is the supervisor
+  SPARK_DRIVER_MEMORY: "2g"
+  STREAMLAKE_LOG_LEVEL: "INFO"
+  TZ: "UTC"

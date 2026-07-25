@@ -1,38 +1,51 @@
 """The nightly batch DAG.
 
-Every task calls the same function the CLI calls — there is no scheduler-only code path, so
-what you debug by hand is what runs at 03:00. The DAG's job is scheduling, retries, and
-dependency order; the pipeline logic lives in ``src/streamlake``.
+Every task shells out to the same ``streamlake`` CLI you run by hand. That is deliberate, and it
+is the one design decision in this file worth explaining:
 
-Failure semantics are the point of the whole project: a contract breach raises
-``DataContractViolation`` inside a task, the task fails, downstream tasks are never scheduled,
-and the stale-but-correct warehouse keeps serving yesterday's data instead of today's bad data.
+Airflow's dependency pins and Spark's do not agree, so Airflow lives in its own virtualenv
+(``.venv-airflow``) and the pipeline lives in ``.venv``. If the tasks were PythonOperators they
+would import PySpark into the scheduler's interpreter, which does not have it — and the failure
+would arrive at run time, in a worker log, looking like a data problem. Shelling out keeps the
+two environments honestly separated and means there is no scheduler-only code path: what you
+debug in a terminal is byte-for-byte what runs at 03:00.
+
+Failure semantics are the point of the whole project: a contract breach raises inside the CLI,
+the process exits non-zero, the task fails, downstream tasks never start, and the warehouse
+keeps serving yesterday's correct data instead of today's bad data.
 """
 
 from __future__ import annotations
 
-import os
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from airflow.sdk import dag, task
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "src"))
+PIPELINE_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+DBT = REPO_ROOT / ".venv" / "bin" / "dbt"
 
-# Spark needs a JDK it supports and a UTC driver; the scheduler's environment is not the shell
-# environment, so both are set explicitly rather than assumed.
-os.environ.setdefault("TZ", "UTC")
+# Spark 4 supports JDK 17 and 21 but not 25, and the scheduler's environment is not your shell's,
+# so the JDK is resolved explicitly rather than inherited.
+ENV = (
+    f'cd "{REPO_ROOT}" && '
+    'export JAVA_HOME="$(/usr/libexec/java_home -v 17 2>/dev/null || echo "$JAVA_HOME")" && '
+    f'export PYTHONPATH="{REPO_ROOT}/src" && export TZ=UTC && '
+)
+
+
+def streamlake(command: str) -> str:
+    """Build the shell command for one pipeline step."""
+    return f"{ENV} {PIPELINE_PYTHON} -m streamlake {command}"
+
 
 DEFAULT_ARGS = {
     "owner": "kalyan",
-    "retries": 2,
+    # Retries are for the flaky parts — a download, an object-store write. A contract breach is
+    # not transient: retrying it just fails three times more slowly.
+    "retries": 1,
     "retry_delay": timedelta(minutes=2),
-    # A contract breach is not a transient error — retrying it just fails three times slower.
-    # Retries here are for the flaky parts: the download and the object-store write.
-    "retry_exponential_backoff": True,
     "depends_on_past": False,
 }
 
@@ -49,78 +62,72 @@ DEFAULT_ARGS = {
     doc_md=__doc__,
 )
 def streamlake_batch():
-    @task(retries=3)
-    def ingest() -> dict:
+    @task.bash(retries=3)
+    def ingest() -> str:
         """Download and checksum the source files. The only task allowed to touch the network."""
-        from streamlake.batch import ingest as job
+        return streamlake("ingest")
 
-        return job.run()
+    @task.bash
+    def bronze() -> str:
+        """Land the raw file in Iceberg unchanged; fail if it is not the month we asked for."""
+        return streamlake("bronze")
 
-    @task
-    def bronze() -> dict:
-        """Land the raw file in Iceberg, unchanged. Fails if the file is not the month we asked for."""
-        from streamlake.batch import bronze as job
-
-        return job.run()
-
-    @task
-    def silver() -> dict:
+    @task.bash
+    def silver() -> str:
         """Conform, quarantine, dedup. Fails if the quarantine rate blows past its budget."""
-        from streamlake.batch import silver as job
+        return streamlake("silver")
 
-        return job.run()
-
-    @task
-    def gold() -> dict:
+    @task.bash
+    def gold() -> str:
         """Build the lake-side aggregates."""
-        from streamlake.batch import gold as job
+        return streamlake("gold")
 
-        return job.run()
-
-    @task
-    def export() -> dict:
+    @task.bash
+    def export() -> str:
         """Write the curated Parquet the warehouse loads, plus a manifest to reconcile against."""
-        from streamlake.batch import export as job
+        return streamlake("export")
 
-        return job.run()
-
-    @task
-    def warehouse_load() -> dict:
-        """Load DuckDB or Snowflake and reconcile row counts against the export manifest."""
-        from streamlake.warehouse import load as job
-
-        return job.run()
+    @task.bash
+    def warehouse_load() -> str:
+        """Load DuckDB or Snowflake, reconciling row counts against the export manifest."""
+        return streamlake("warehouse-load")
 
     @task.bash
     def dbt_build() -> str:
-        """Run every dbt model and test. `dbt build` interleaves them, so a model whose test
-        fails does not get used by the models downstream of it."""
+        """Run every dbt model and test.
+
+        `dbt build` interleaves models and their tests, so a model whose test fails does not get
+        consumed by the models downstream of it.
+        """
         return (
-            f"cd {REPO_ROOT} && "
-            f"{REPO_ROOT}/.venv/bin/dbt build "
-            f"--project-dir dbt/streamlake --profiles-dir dbt/streamlake"
+            f'{ENV} {DBT} build --project-dir dbt/streamlake --profiles-dir dbt/streamlake'
         )
 
-    @task
-    def dashboard() -> dict:
+    @task.bash
+    def dashboard() -> str:
         """Render the static BI dashboard from the marts."""
-        from streamlake.dashboard import build as job
+        return streamlake("dashboard")
 
-        return job.run()
-
-    @task(trigger_rule="all_done")
-    def contract_summary() -> dict:
-        """Always runs. Collects every contract report from this run into one summary.
+    @task.bash(trigger_rule="all_done")
+    def contract_summary() -> str:
+        """Always runs.
 
         trigger_rule="all_done" is deliberate: the run you most want a contract summary for is
         the one that just failed.
         """
-        from streamlake.contracts.summary import summarise
+        return streamlake("summary")
 
-        return summarise()
-
-    chain = ingest() >> bronze() >> silver() >> gold() >> export() >> warehouse_load()
-    chain >> dbt_build() >> dashboard() >> contract_summary()
+    (
+        ingest()
+        >> bronze()
+        >> silver()
+        >> gold()
+        >> export()
+        >> warehouse_load()
+        >> dbt_build()
+        >> dashboard()
+        >> contract_summary()
+    )
 
 
 streamlake_batch()

@@ -15,7 +15,9 @@ catalog such as Polaris/Nessie/Glue-via-REST in a real deployment.
 from __future__ import annotations
 
 import os
+import sys
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from streamlake.config import Config, get_config
@@ -58,6 +60,18 @@ def _catalog_conf(cfg: Config) -> dict[str, str]:
     return conf
 
 
+def _pin_python_interpreter() -> None:
+    """Make Spark's Python workers use the same interpreter as the driver.
+
+    Without this, Spark launches workers with whatever `python3` resolves to on PATH. On a
+    machine with a newer system Python than the virtualenv, every job that needs a Python worker
+    dies with PYTHON_VERSION_MISMATCH — and it dies at execution time, so it looks like a data
+    problem rather than an environment one.
+    """
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
+
+
 def _pin_driver_timezone() -> None:
     """Make the driver process agree with ``spark.sql.session.timeZone``.
 
@@ -82,6 +96,7 @@ def build_spark(
     from pyspark.sql import SparkSession
 
     cfg = cfg or get_config()
+    _pin_python_interpreter()
     _pin_driver_timezone()
 
     packages = list(cfg.get("spark.packages", []) or [])
@@ -91,9 +106,19 @@ def build_spark(
     builder = (
         SparkSession.builder.appName(f"{cfg.get('spark.app_name', 'streamlake')}-{app_suffix}")
         .master(str(cfg.get("spark.master", "local[*]")))
-        .config("spark.jars.packages", ",".join(packages))
         .config("spark.sql.extensions", ICEBERG_EXTENSIONS)
     )
+
+    # In a container the jars are baked into the image (scripts/fetch_jars.sh), so a pod start
+    # never depends on Maven Central being reachable from the cluster. Locally, Ivy resolution
+    # is fine and cached in ~/.ivy2 after the first run.
+    jars_dir = os.environ.get("STREAMLAKE_JARS")
+    if jars_dir and Path(jars_dir).is_dir():
+        jars = sorted(str(p) for p in Path(jars_dir).glob("*.jar"))
+        log.info("using %d pre-fetched jars from %s", len(jars), jars_dir)
+        builder = builder.config("spark.jars", ",".join(jars))
+    else:
+        builder = builder.config("spark.jars.packages", ",".join(packages))
 
     for key, value in (cfg.get("spark.conf", {}) or {}).items():
         builder = builder.config(key, str(value))

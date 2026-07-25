@@ -16,9 +16,10 @@ from __future__ import annotations
 import json
 import random
 import time
-from datetime import datetime, timedelta, timezone
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from streamlake.config import Config, get_config
 from streamlake.logging_utils import banner, get_logger
@@ -65,7 +66,7 @@ def _events(rows: list[dict[str, Any]], cfg: Config) -> Iterator[tuple[str, dict
     rng = random.Random(42)  # reproducible misbehaviour
 
     for row in rows:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         event_ts = now
         late = rng.random() < late_rate
         if late:
@@ -179,9 +180,7 @@ def _write_stats(cfg: Config, stats: dict[str, int]) -> None:
     reports = cfg.path("reports") / "stream"
     reports.mkdir(parents=True, exist_ok=True)
     path = Path(reports / "producer_latest.json")
-    path.write_text(
-        json.dumps({"produced_at": datetime.now(timezone.utc).isoformat(), **stats}, indent=2)
-    )
+    path.write_text(json.dumps({"produced_at": datetime.now(UTC).isoformat(), **stats}, indent=2))
 
 
 if __name__ == "__main__":  # pragma: no cover

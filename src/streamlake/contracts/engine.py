@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -56,9 +56,7 @@ class ContractReport:
 
     def failed(self, severity: str | None = None) -> list[CheckResult]:
         return [
-            r
-            for r in self.results
-            if not r.passed and (severity is None or r.severity == severity)
+            r for r in self.results if not r.passed and (severity is None or r.severity == severity)
         ]
 
     @property
@@ -135,12 +133,9 @@ def validate(
     from pyspark.sql import functions as F
 
     ctx = ctx or ValidationContext()
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
 
-    compiled = [
-        compile_check(spec, df, ctx, uid)
-        for uid, spec in enumerate(contract.all_checks)
-    ]
+    compiled = [compile_check(spec, df, ctx, uid) for uid, spec in enumerate(contract.all_checks)]
 
     # One pass: count(*) plus every check's aggregate expressions.
     aggregates = {TOTAL_ROWS: F.count(F.lit(1))}
@@ -168,7 +163,7 @@ def validate(
         row_count=int(row.get(TOTAL_ROWS) or 0),
         results=results,
         started_at=started.isoformat(),
-        duration_seconds=(datetime.now(timezone.utc) - started).total_seconds(),
+        duration_seconds=(datetime.now(UTC) - started).total_seconds(),
         mode=mode,
     )
 
@@ -202,7 +197,7 @@ def enforce(
         df,
         contract,
         stage=stage,
-        ctx=ValidationContext(as_of=as_of or datetime.now(timezone.utc)),
+        ctx=ValidationContext(as_of=as_of or datetime.now(UTC)),
         mode=mode or str(cfg.get("contracts.on_violation", "fail")),
         reports_dir=cfg.path("reports"),
     )

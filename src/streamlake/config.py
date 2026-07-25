@@ -101,7 +101,9 @@ class Config:
 
 
 def load_config(path: str | Path | None = None) -> Config:
-    config_path = Path(path) if path else Path(os.environ.get("STREAMLAKE_CONFIG", DEFAULT_CONFIG_PATH))
+    config_path = (
+        Path(path) if path else Path(os.environ.get("STREAMLAKE_CONFIG", DEFAULT_CONFIG_PATH))
+    )
     with open(config_path) as fh:
         raw = yaml.safe_load(fh)
     return Config(data=_expand(raw), root=REPO_ROOT)

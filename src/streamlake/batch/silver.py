@@ -56,9 +56,9 @@ def run(cfg: Config | None = None) -> dict[str, int]:
     bronze = spark.table(cfg.table("bronze", "trips_raw"))
     zones = spark.table(cfg.table("bronze", "zones_raw"))
 
-    conformed = derive_trip_metrics(
-        normalize_timestamps(rename_to_silver(bronze))
-    ).withColumn("reject_reason", reject_reason(start, end))
+    conformed = derive_trip_metrics(normalize_timestamps(rename_to_silver(bronze))).withColumn(
+        "reject_reason", reject_reason(start, end)
+    )
     conformed.cache()
 
     rejected = conformed.where(F.col("reject_reason").isNotNull())

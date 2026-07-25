@@ -106,6 +106,40 @@ def _cmd_dashboard(args: argparse.Namespace) -> object:
     return build.run()
 
 
+@command("stream-check", "fail if the streaming table's newest window is too far behind")
+def _cmd_stream_check(args: argparse.Namespace) -> object:
+    """Catch the failure a green DAG hides: the consumer ran, exited cleanly, processed nothing."""
+    from datetime import datetime, timezone
+
+    from streamlake.spark import build_spark
+
+    cfg = get_config()
+    spark = build_spark("stream-check", cfg=cfg)
+    table = cfg.table("stream", "trip_metrics_1m")
+    if not spark.catalog.tableExists(table):
+        raise RuntimeError(f"{table} does not exist — the stream has never run")
+
+    latest = spark.sql(f"SELECT max(window_end) AS w FROM {table}").collect()[0]["w"]
+    if latest is None:
+        raise RuntimeError(f"{table} is empty — the stream has never produced a window")
+
+    latest = latest if latest.tzinfo else latest.replace(tzinfo=timezone.utc)
+    lag_minutes = (datetime.now(timezone.utc) - latest).total_seconds() / 60
+    if lag_minutes > args.max_lag_minutes:
+        raise RuntimeError(
+            f"stream lag is {lag_minutes:.1f} minutes (limit {args.max_lag_minutes}) — "
+            "the consumer is not keeping up, or it is not running at all"
+        )
+    return {"latest_window_end": latest.isoformat(), "lag_minutes": round(lag_minutes, 2)}
+
+
+@command("summary", "roll the latest contract reports into one summary")
+def _cmd_summary(args: argparse.Namespace) -> object:
+    from streamlake.contracts.summary import summarise
+
+    return summarise()
+
+
 @command("contracts", "list the contracts and what each one asserts")
 def _cmd_contracts(args: argparse.Namespace) -> object:
     from streamlake.contracts import load_contracts
@@ -134,6 +168,10 @@ def main(argv: list[str] | None = None) -> int:
             sub.add_argument("--max-events", type=int, default=None, dest="max_events")
         if name == "consume":
             sub.add_argument("--run-seconds", type=int, default=None, dest="run_seconds")
+        if name == "stream-check":
+            sub.add_argument(
+                "--max-lag-minutes", type=float, default=30.0, dest="max_lag_minutes"
+            )
 
     args = parser.parse_args(argv)
     _, handler = COMMANDS[args.command]

@@ -1,0 +1,24 @@
+# Structured Streaming's checkpoint is the only truly stateful thing in the deployment: it holds
+# the Kafka offsets and the watermark/dedup state. Lose it and the job either replays from the
+# beginning or silently skips the gap — so it gets a volume, not an emptyDir.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: streamlake-checkpoints
+  namespace: streamlake
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: streamlake-warehouse
+  namespace: streamlake
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 20Gi

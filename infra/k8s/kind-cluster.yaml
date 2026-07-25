@@ -1,0 +1,11 @@
+# A one-node kind cluster is enough to prove the manifests: the point is the Deployment,
+# volumes and probes, not multi-node scheduling.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: streamlake
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30040
+        hostPort: 30040
+        protocol: TCP

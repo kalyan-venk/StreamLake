@@ -10,7 +10,7 @@ to know before dbt runs.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from streamlake.config import Config, get_config
 from streamlake.logging_utils import banner, get_logger
@@ -98,9 +98,7 @@ def run(cfg: Config | None = None) -> dict[str, int]:
 
     manifest_path = curated_root / "_export_manifest.json"
     manifest_path.write_text(
-        json.dumps(
-            {"exported_at": datetime.now(timezone.utc).isoformat(), "tables": manifest}, indent=2
-        )
+        json.dumps({"exported_at": datetime.now(UTC).isoformat(), "tables": manifest}, indent=2)
     )
     log.info("manifest: %s", manifest_path)
     return counts

@@ -9,14 +9,15 @@ pass to collect example rows.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from streamlake.contracts.spec import CheckSpec, parse_duration
 
 if TYPE_CHECKING:  # pragma: no cover
-    from pyspark.sql import Column, DataFrame
+    from pyspark.sql import DataFrame
 
 TOTAL_ROWS = "total_rows"
 
@@ -32,7 +33,7 @@ class ValidationContext:
 
     # Freshness is measured against the *logical* run time, not wall clock: a backfill of
     # January data is not stale just because it is July.
-    as_of: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    as_of: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -86,9 +87,7 @@ def compile_check(
     spec: CheckSpec, df: DataFrame, ctx: ValidationContext, uid: int = 0
 ) -> CompiledCheck:
     if spec.type not in _REGISTRY:
-        raise ValueError(
-            f"unknown check type {spec.type!r}; known types: {sorted(_REGISTRY)}"
-        )
+        raise ValueError(f"unknown check type {spec.type!r}; known types: {sorted(_REGISTRY)}")
     return _REGISTRY[spec.type](spec, df, ctx, uid)
 
 
@@ -121,9 +120,7 @@ def _missing_columns(spec: CheckSpec, df: DataFrame, columns: list[str]) -> Chec
 
 
 @register("schema")
-def _schema(
-    spec: CheckSpec, df: DataFrame, ctx: ValidationContext, uid: int = 0
-) -> CompiledCheck:
+def _schema(spec: CheckSpec, df: DataFrame, ctx: ValidationContext, uid: int = 0) -> CompiledCheck:
     declared = spec.require("columns")
     strict = bool(spec.param("strict", False))
     actual = {f.name: f.dataType.simpleString() for f in df.schema.fields}
@@ -166,9 +163,7 @@ def _not_null(
     if guard:
         return CompiledCheck(spec, {}, lambda _: guard)
 
-    aggs = {
-        f"c{uid}_nulls_{_slug(c)}": F.sum(F.col(c).isNull().cast("long")) for c in columns
-    }
+    aggs = {f"c{uid}_nulls_{_slug(c)}": F.sum(F.col(c).isNull().cast("long")) for c in columns}
     predicate = " OR ".join(f"{c} IS NULL" for c in columns)
 
     def evaluate(row: dict[str, Any]) -> CheckResult:
@@ -188,9 +183,7 @@ def _not_null(
 
 
 @register("unique")
-def _unique(
-    spec: CheckSpec, df: DataFrame, ctx: ValidationContext, uid: int = 0
-) -> CompiledCheck:
+def _unique(spec: CheckSpec, df: DataFrame, ctx: ValidationContext, uid: int = 0) -> CompiledCheck:
     from pyspark.sql import functions as F
 
     columns = list(spec.require("columns"))
@@ -394,9 +387,9 @@ def _freshness(
                 expected=f"max({column}) newer than {max_age:.0f}s before the run time",
             )
         if isinstance(latest, datetime):
-            latest_dt = latest if latest.tzinfo else latest.replace(tzinfo=timezone.utc)
+            latest_dt = latest if latest.tzinfo else latest.replace(tzinfo=UTC)
         else:  # date
-            latest_dt = datetime(latest.year, latest.month, latest.day, tzinfo=timezone.utc)
+            latest_dt = datetime(latest.year, latest.month, latest.day, tzinfo=UTC)
         age = (ctx.as_of - latest_dt).total_seconds()
         return _result(
             spec,

@@ -127,9 +127,7 @@ def reject_reason(period_start: str, period_end: str) -> Column:
     """
     from pyspark.sql import functions as F
 
-    duration_min = (
-        F.unix_timestamp("dropoff_ts") - F.unix_timestamp("pickup_ts")
-    ) / F.lit(60.0)
+    duration_min = (F.unix_timestamp("dropoff_ts") - F.unix_timestamp("pickup_ts")) / F.lit(60.0)
 
     return (
         F.when(F.col("pickup_ts").isNull() | F.col("dropoff_ts").isNull(), "missing_timestamp")
@@ -152,9 +150,7 @@ def derive_trip_metrics(df: DataFrame) -> DataFrame:
     """Business-level columns every downstream consumer would otherwise recompute."""
     from pyspark.sql import functions as F
 
-    duration_min = (
-        F.unix_timestamp("dropoff_ts") - F.unix_timestamp("pickup_ts")
-    ) / F.lit(60.0)
+    duration_min = (F.unix_timestamp("dropoff_ts") - F.unix_timestamp("pickup_ts")) / F.lit(60.0)
 
     return (
         df.withColumn("trip_duration_min", F.round(duration_min, 3))

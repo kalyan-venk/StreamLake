@@ -1,0 +1,41 @@
+# Image for the streaming consumer.
+#
+# Spark 4 needs a JDK it supports (17 or 21 — not 25), so the base image pins one rather than
+# inheriting whatever the build host has. Dependencies are installed in their own layer above
+# the source so a code change does not re-resolve the whole dependency tree.
+
+FROM eclipse-temurin:17-jre-jammy
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TZ=UTC \
+    PYSPARK_PYTHON=python3 \
+    STREAMLAKE_ENV=k8s
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-pip python3-venv procps \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/streamlake
+
+COPY pyproject.toml ./
+RUN python3 -m pip install --no-cache-dir \
+        "pyspark==4.0.4" duckdb pandas pyarrow requests pyyaml confluent-kafka
+
+# Pre-resolve the Iceberg and Kafka jars at build time. Without this the first pod start does a
+# Maven resolution over the network, which is both slow and a runtime dependency on repo1
+# being reachable from the cluster.
+COPY scripts/fetch_jars.sh ./scripts/fetch_jars.sh
+RUN chmod +x scripts/fetch_jars.sh && ./scripts/fetch_jars.sh /opt/streamlake/jars
+
+COPY conf ./conf
+COPY src ./src
+
+ENV PYTHONPATH=/opt/streamlake/src \
+    STREAMLAKE_JARS=/opt/streamlake/jars
+
+RUN useradd --create-home --uid 10001 streamlake && chown -R streamlake /opt/streamlake
+USER streamlake
+
+ENTRYPOINT ["python3", "-m", "streamlake"]
+CMD ["consume"]

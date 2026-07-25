@@ -12,7 +12,7 @@ survives being emailed, and can be committed as evidence of a run.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -29,6 +29,10 @@ MARTS_SCHEMA = "analytics_marts"
 # than its container gets scaled up and its 12px labels arrive as 17px; one much wider shrinks
 # them to 6px. Matching the two keeps type sizes consistent across the page.
 CARD_WIDTH = 520
+STREAM_EMPTY = (
+    '<p class="empty">the streaming arm has not been exported yet — '
+    "run <code>make stream</code> then <code>make export warehouse</code></p>"
+)
 FULL_WIDTH = 1060
 STAGING_SCHEMA = "analytics_staging"
 
@@ -150,7 +154,8 @@ def collect(cfg: Config) -> dict[str, Any]:
         if exists:
             quarantine = _rows(
                 con,
-                f"SELECT reject_reason, rows FROM {raw_schema}.quarantine_reasons ORDER BY rows DESC",
+                f"SELECT reject_reason, rows FROM {raw_schema}.quarantine_reasons "
+                "ORDER BY rows DESC",
             )
 
         stream: list[dict[str, Any]] = []
@@ -185,7 +190,9 @@ def collect(cfg: Config) -> dict[str, Any]:
     }
 
 
-def _table(headers: list[str], rows: list[list[str]], *, align_right: set[int] | None = None) -> str:
+def _table(
+    headers: list[str], rows: list[list[str]], *, align_right: set[int] | None = None
+) -> str:
     align_right = align_right or set()
     head = "".join(
         f'<th class="{"num" if i in align_right else ""}">{escape(h)}</th>'
@@ -216,8 +223,16 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
         ("Trips", f"{total_trips:,}", f"{cfg.month} · yellow taxi"),
         ("Revenue", f"${charts.compact(total_revenue)}", "total fares collected"),
         ("Average ticket", f"${avg_ticket:,.2f}", "revenue per trip"),
-        ("Zones covered", f"{data['coverage']['zones']}", f"pickup zones across {data['coverage']['boroughs']} boroughs"),
-        ("Quarantined", f"{quarantined:,}", f"{100 * quarantined / (total_trips + quarantined):.2f}% of ingested rows"),
+        (
+            "Zones covered",
+            f"{data['coverage']['zones']}",
+            f"pickup zones across {data['coverage']['boroughs']} boroughs",
+        ),
+        (
+            "Quarantined",
+            f"{quarantined:,}",
+            f"{100 * quarantined / (total_trips + quarantined):.2f}% of ingested rows",
+        ),
     ]
     tile_html = "".join(
         f'<div class="tile"><div class="tile-label">{escape(label)}</div>'
@@ -236,7 +251,11 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
     hours = sorted({h["pickup_hour"] for h in data["hourly"]})
     series = []
     for slot, borough in enumerate(dict.fromkeys(h["pickup_borough"] for h in data["hourly"])):
-        by_hour = {h["pickup_hour"]: float(h["trips"]) for h in data["hourly"] if h["pickup_borough"] == borough}
+        by_hour = {
+            h["pickup_hour"]: float(h["trips"])
+            for h in data["hourly"]
+            if h["pickup_borough"] == borough
+        }
         series.append(charts.Series(borough, [by_hour.get(hour, 0.0) for hour in hours], slot))
     hourly_chart = charts.multiline(
         [f"{h:02d}" for h in hours],
@@ -260,7 +279,16 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
     )
 
     borough_table = _table(
-        ["Borough", "Trips", "Share", "Revenue", "Avg ticket", "Avg miles", "Avg minutes", "Avg tip %"],
+        [
+            "Borough",
+            "Trips",
+            "Share",
+            "Revenue",
+            "Avg ticket",
+            "Avg miles",
+            "Avg minutes",
+            "Avg tip %",
+        ],
         [
             [
                 escape(b["pickup_borough"]),
@@ -319,7 +347,8 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
             f"{c['checks_total'] - c['checks_failed']}/{c['checks_total']}",
             f"{c['duration_seconds']:.2f}s",
             charts.status_dot(
-                "good" if c["status"] == "PASSED"
+                "good"
+                if c["status"] == "PASSED"
                 else ("warning" if c["status"] == "PASSED_WITH_WARNINGS" else "critical")
             )
             + escape(c["status"].replace("_", " ").lower()),
@@ -335,21 +364,25 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
     failures = contracts.get("failures", [])
     failure_html = (
         "".join(
-            f'<li>{charts.status_dot("critical" if f["severity"] == "error" else "warning")}'
-            f'<code>{escape(f["contract"])}</code> · <strong>{escape(f["check"])}</strong> — '
-            f'observed {escape(str(f["observed"]))}, expected {escape(str(f["expected"]))}</li>'
+            f"<li>{charts.status_dot('critical' if f['severity'] == 'error' else 'warning')}"
+            f"<code>{escape(f['contract'])}</code> · <strong>{escape(f['check'])}</strong> — "
+            f"observed {escape(str(f['observed']))}, expected {escape(str(f['expected']))}</li>"
             for f in failures
         )
         if failures
         else '<li class="muted">No breaches in the latest run.</li>'
     )
 
-    quarantine_bar = charts.hbar(
-        [q["reject_reason"].replace("_", " ") for q in data["quarantine"]],
-        [float(q["rows"]) for q in data["quarantine"]],
-        width=CARD_WIDTH,
-        label_width=190,
-    ) if data["quarantine"] else '<p class="empty">no quarantined rows recorded</p>'
+    quarantine_bar = (
+        charts.hbar(
+            [q["reject_reason"].replace("_", " ") for q in data["quarantine"]],
+            [float(q["rows"]) for q in data["quarantine"]],
+            width=CARD_WIDTH,
+            label_width=190,
+        )
+        if data["quarantine"]
+        else '<p class="empty">no quarantined rows recorded</p>'
+    )
 
     stream_table = (
         _table(
@@ -366,7 +399,7 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
             align_right={2, 3},
         )
         if data["stream"]
-        else '<p class="empty">the streaming arm has not been exported yet — run `make stream` then `make export warehouse`</p>'
+        else STREAM_EMPTY
     )
 
     daily_series = [charts.Series("trips", [float(d["trips"]) for d in data["daily"]], 0)]
@@ -380,7 +413,7 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
 
     return render_page(
         month=cfg.month,
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         contract_status=contracts.get("status", "UNKNOWN"),
         contract_counts=contracts,
         tiles=tile_html,

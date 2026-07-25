@@ -12,7 +12,7 @@ appending a second copy of every trip.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from streamlake.config import Config, get_config
 from streamlake.contracts import enforce
@@ -29,8 +29,8 @@ ZONES_TABLE = "zones_raw"
 def period(cfg: Config) -> tuple[str, str]:
     """First instant of the configured month, and first instant of the next month."""
     year, month = (int(x) for x in cfg.month.split("-"))
-    start = datetime(year, month, 1, tzinfo=timezone.utc)
-    end = datetime(year + (month == 12), (month % 12) + 1, 1, tzinfo=timezone.utc)
+    start = datetime(year, month, 1, tzinfo=UTC)
+    end = datetime(year + (month == 12), (month % 12) + 1, 1, tzinfo=UTC)
     return start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -41,15 +41,14 @@ def as_of(cfg: Config) -> datetime:
     tells you nothing. What you actually want to assert is "the data covers its own period".
     """
     _, end = period(cfg)
-    return datetime.strptime(end, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    return datetime.strptime(end, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
 
 
 def run(cfg: Config | None = None, *, batch_id: str | None = None) -> dict[str, int]:
-    from pyspark.sql import functions as F
     from pyspark.sql.functions import partitioning as P
 
     cfg = cfg or get_config()
-    batch_id = batch_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    batch_id = batch_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     banner(log, f"BRONZE | month={cfg.month} batch_id={batch_id}")
 
     spark = build_spark("bronze", cfg=cfg)
