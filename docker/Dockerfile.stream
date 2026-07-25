@@ -3,8 +3,12 @@
 # Spark 4 needs a JDK it supports (17 or 21 — not 25), so the base image pins one rather than
 # inheriting whatever the build host has. Dependencies are installed in their own layer above
 # the source so a code change does not re-resolve the whole dependency tree.
+#
+# Noble, not Jammy: Jammy ships Python 3.10 and this project targets 3.11+ (see
+# requires-python). Nothing catches that mismatch at build time — the image builds cleanly and
+# then dies on the first import inside the cluster.
 
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:17-jre-noble
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -19,7 +23,9 @@ RUN apt-get update \
 WORKDIR /opt/streamlake
 
 COPY pyproject.toml ./
-RUN python3 -m pip install --no-cache-dir \
+# --break-system-packages: Ubuntu 24.04 marks the system interpreter as externally managed
+# (PEP 668). In a single-purpose container there is no other environment to protect.
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
         "pyspark==4.0.4" duckdb pandas pyarrow requests pyyaml confluent-kafka
 
 # Pre-resolve the Iceberg and Kafka jars at build time. Without this the first pod start does a

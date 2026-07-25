@@ -4,6 +4,7 @@ namespace: streamlake
 resources:
   - namespace.yaml
   - configmap.yaml
+  - kafka-dev.yaml
   - pvc.yaml
   - deployment.yaml
   - service.yaml

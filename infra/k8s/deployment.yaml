@@ -27,6 +27,30 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         fsGroup: 10001
+      initContainers:
+        # Wait for the broker and create the topic explicitly. Relying on Kafka's
+        # auto.create.topics.enable does not work here: Spark's offset reader asks the admin API
+        # for partitions before any produce request exists, gets UnknownTopicOrPartition, and the
+        # query dies. Creating the topic up front is also what you want in production, where
+        # partition count and retention are deliberate choices rather than broker defaults.
+        - name: create-topic
+          image: apache/kafka:3.9.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              until /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BOOTSTRAP" --list >/dev/null 2>&1; do
+                echo "waiting for broker at $KAFKA_BOOTSTRAP"; sleep 3
+              done
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BOOTSTRAP" \
+                --create --if-not-exists --topic "$KAFKA_TOPIC" \
+                --partitions 3 --replication-factor 1
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BOOTSTRAP" \
+                --describe --topic "$KAFKA_TOPIC"
+          envFrom:
+            - configMapRef:
+                name: streamlake-env
       containers:
         - name: consumer
           image: streamlake/stream:local

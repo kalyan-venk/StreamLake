@@ -110,6 +110,31 @@ resource "kubernetes_deployment_v1" "consumer" {
           fs_group        = 10001
         }
 
+        # Wait for the broker and create the topic explicitly. Spark's offset reader queries the
+        # admin API before any produce request exists, so relying on the broker's auto-create
+        # setting leaves the query dead with UnknownTopicOrPartition. Declaring partitions and
+        # replication here also makes them a decision rather than a default.
+        init_container {
+          name  = "create-topic"
+          image = "apache/kafka:3.9.0"
+          command = ["/bin/sh", "-c", <<-EOT
+            set -e
+            until /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BOOTSTRAP" --list >/dev/null 2>&1; do
+              echo "waiting for broker at $KAFKA_BOOTSTRAP"; sleep 3
+            done
+            /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BOOTSTRAP" \
+              --create --if-not-exists --topic "$KAFKA_TOPIC" \
+              --partitions 3 --replication-factor 1
+          EOT
+          ]
+
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map_v1.env.metadata[0].name
+            }
+          }
+        }
+
         container {
           name              = "consumer"
           image             = var.image
