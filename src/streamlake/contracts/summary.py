@@ -1,9 +1,7 @@
 """Roll every contract report from a run into one summary.
 
-Individual JSON reports are what you read when you already know which hop broke. This is what
-you read when you do not: one file, every contract, in pipeline order, with the failures first.
-The Airflow DAG runs it with ``trigger_rule="all_done"`` so it is produced for failed runs too —
-which are the runs where it matters.
+One file, every contract, in pipeline order, with the failures first. The Airflow DAG runs it
+with ``trigger_rule="all_done"`` so a failed run still produces one.
 """
 
 from __future__ import annotations

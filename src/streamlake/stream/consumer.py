@@ -1,25 +1,23 @@
 """Spark Structured Streaming: Kafka -> windowed aggregation -> Iceberg upsert.
 
-The four things this file exists to demonstrate, in the order they appear:
+Four things here are load-bearing and none of them are obvious from the code alone.
 
-1. **Event-time watermark.** ``withWatermark("event_ts", "2 minutes")`` tells Spark how long to
-   wait for stragglers. It is the contract between completeness and memory: without it, state
-   for every window ever seen is kept forever; with it, a window is finalised two minutes after
-   its event time passes and anything later is dropped rather than silently rewriting history.
+``withWatermark("event_ts", "2 minutes")`` sets how long Spark waits for stragglers. Without it
+state for every window ever seen is kept forever; with it a window is finalised two minutes
+after its event time passes, and anything later is dropped rather than silently rewriting
+history.
 
-2. **Deduplication.** ``dropDuplicatesWithinWatermark(["trip_id"])`` removes the redeliveries the
-   producer injects. Kafka is at-least-once; without this, a redelivered trip is counted twice
-   in its window and the revenue number is simply wrong. The watermark-scoped variant is the
-   right one here because a duplicate can carry a *different* event time than the original, which
-   plain ``dropDuplicates`` on (id, event_ts) would miss.
+``dropDuplicatesWithinWatermark(["trip_id"])`` removes the redeliveries the producer injects.
+Kafka is at-least-once, and a redelivered trip counted twice makes the revenue number wrong. The
+watermark-scoped variant is the right one because a duplicate can carry a *different* event time
+than the original, which plain ``dropDuplicates`` on (id, event_ts) would miss.
 
-3. **Idempotent sink.** Windowed aggregates in update mode re-emit a window every time it
-   changes, so the sink must be a MERGE keyed on the window, not an append. Append would leave
-   several rows for one window and double-count on read.
+Windowed aggregates in update mode re-emit a window every time it changes, so the sink is a
+MERGE keyed on the window rather than an append. Append would leave several rows for one window
+and double-count on read.
 
-4. **Contracts inside foreachBatch.** Each micro-batch is validated *before* it is merged. A
-   breach raises, the batch is not committed, and the offsets are not advanced — the streaming
-   equivalent of failing the DAG.
+Each micro-batch is validated *before* it is merged. A breach raises, the batch is not
+committed, and the offsets are not advanced — the streaming equivalent of failing the DAG.
 """
 
 from __future__ import annotations
@@ -74,7 +72,7 @@ def event_schema():
 
 
 def ensure_target_table(spark, cfg: Config) -> str:
-    """Create the Iceberg sink up front so the first micro-batch can MERGE into it."""
+    # The sink has to exist before the first micro-batch, or its MERGE has nothing to target.
     table = cfg.table("stream", TABLE)
     spark.sql(
         f"""
@@ -158,8 +156,6 @@ def make_batch_writer(cfg: Config, table: str):
     state = {"batches": 0, "rows": 0}
 
     def write_batch(batch_df, batch_id: int) -> None:
-        from pyspark.sql import DataFrame  # noqa: F401  (documents what batch_df is)
-
         stamped = batch_df.withColumn("updated_at", F.current_timestamp())
         # Cache: the contract pass and the MERGE both consume this batch, and recomputing it
         # would mean re-reading the same Kafka offsets twice.

@@ -23,7 +23,6 @@ DEFAULT_CONFIG_PATH = REPO_ROOT / "conf" / "streamlake.yml"
 
 
 def _expand(value: Any) -> Any:
-    """Recursively resolve ${VAR:default} placeholders inside a parsed YAML tree."""
     if isinstance(value, str):
 
         def sub(match: re.Match[str]) -> str:
@@ -40,8 +39,6 @@ def _expand(value: Any) -> Any:
 
 @dataclass(frozen=True)
 class Config:
-    """Thin, dotted-path accessor over the parsed config tree."""
-
     data: dict[str, Any]
     root: Path
 
@@ -60,7 +57,6 @@ class Config:
         return value
 
     def path(self, key: str) -> Path:
-        """Resolve a configured path relative to the repo root and create its parent."""
         raw = str(self.require(f"paths.{key}"))
         resolved = Path(raw) if Path(raw).is_absolute() else self.root / raw
         return resolved
@@ -76,13 +72,13 @@ class Config:
         return str(self.require("lakehouse.catalog"))
 
     def table(self, layer: str, name: str) -> str:
-        """Fully-qualified Iceberg table identifier, e.g. lakehouse.silver.trips."""
+        """e.g. lakehouse.silver.trips"""
         namespace = self.require(f"lakehouse.namespaces.{layer}")
         return f"{self.catalog}.{namespace}.{name}"
 
     @property
     def warehouse_uri(self) -> str:
-        """Iceberg warehouse location: an absolute file:// URI locally, or s3://... in cloud."""
+        # Iceberg wants an absolute URI, not a relative path: file:// locally, s3:// in cloud.
         raw = str(self.require("lakehouse.warehouse"))
         if "://" in raw:
             return raw

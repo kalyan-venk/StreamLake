@@ -17,7 +17,6 @@ log = get_logger("streamlake.cli")
 
 
 def _batch(args: argparse.Namespace) -> None:
-    """The full Layer 1 spine, in order, in one process."""
     from streamlake.batch import bronze, export, gold, ingest, silver
 
     ingest.run(force=args.force)
@@ -108,7 +107,7 @@ def _cmd_dashboard(args: argparse.Namespace) -> object:
 
 @command("stream-check", "fail if the streaming table's newest window is too far behind")
 def _cmd_stream_check(args: argparse.Namespace) -> object:
-    """Catch the failure a green DAG hides: the consumer ran, exited cleanly, processed nothing."""
+    """A consumer that starts, processes nothing and exits cleanly leaves a green DAG."""
     from datetime import datetime, timezone
 
     from streamlake.spark import build_spark

@@ -1,10 +1,9 @@
 """The contract engine: run a contract against a DataFrame and fail loudly on breach.
 
-The whole point of StreamLake is this file. Every hop of the pipeline (bronze, silver, gold,
-each streaming micro-batch, and the curated export) hands its output to ``validate`` before the
-next hop is allowed to read it. A breach raises :class:`DataContractViolation`, which fails the
-task, which fails the Airflow DAG — bad data stops moving instead of quietly arriving in a
-dashboard.
+Every hop of the pipeline (bronze, silver, gold, each streaming micro-batch, and the curated
+export) hands its output to ``validate`` before the next hop is allowed to read it. A breach
+raises :class:`DataContractViolation`, which fails the task, which fails the Airflow DAG — bad
+data stops moving instead of quietly arriving in a dashboard.
 """
 
 from __future__ import annotations
@@ -185,7 +184,6 @@ def enforce(
     as_of: datetime | None = None,
     mode: str | None = None,
 ) -> ContractReport:
-    """Convenience wrapper used by the jobs: look the contract up by name and run it."""
     from streamlake.config import get_config
 
     cfg = cfg or get_config()

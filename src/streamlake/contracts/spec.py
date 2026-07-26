@@ -1,8 +1,8 @@
 """Data-contract specification: the declarative half of the contract engine.
 
 A contract is a YAML file that states what a dataset must look like at a given hop of the
-pipeline. It is deliberately *not* Python: the contract is meant to be readable by whoever owns
-the data, reviewable in a pull request, and diffable when expectations change.
+pipeline. YAML rather than Python so the person who owns the data can review the expectations
+in a pull request without reading the engine.
 """
 
 from __future__ import annotations

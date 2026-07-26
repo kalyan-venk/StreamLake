@@ -1,18 +1,16 @@
 """The nightly batch DAG.
 
-Every task shells out to the same ``streamlake`` CLI you run by hand. That is deliberate, and it
-is the one design decision in this file worth explaining:
+Every task shells out to the same ``streamlake`` CLI you run by hand.
 
 Airflow's dependency pins and Spark's do not agree, so Airflow lives in its own virtualenv
-(``.venv-airflow``) and the pipeline lives in ``.venv``. If the tasks were PythonOperators they
-would import PySpark into the scheduler's interpreter, which does not have it — and the failure
-would arrive at run time, in a worker log, looking like a data problem. Shelling out keeps the
-two environments honestly separated and means there is no scheduler-only code path: what you
-debug in a terminal is byte-for-byte what runs at 03:00.
+(``.venv-airflow``) and the pipeline lives in ``.venv``. PythonOperators would import PySpark
+into the scheduler's interpreter, which does not have it, and the failure would surface at run
+time in a worker log looking like a data problem. Shelling out keeps the two environments
+separated and leaves no scheduler-only code path.
 
-Failure semantics are the point of the whole project: a contract breach raises inside the CLI,
-the process exits non-zero, the task fails, downstream tasks never start, and the warehouse
-keeps serving yesterday's correct data instead of today's bad data.
+Failure semantics: a contract breach raises inside the CLI, the process exits non-zero, the task
+fails, downstream tasks never start, and the warehouse keeps serving yesterday's correct data
+instead of today's bad data.
 """
 
 from __future__ import annotations
@@ -36,7 +34,6 @@ ENV = (
 
 
 def streamlake(command: str) -> str:
-    """Build the shell command for one pipeline step."""
     return f"{ENV} {PIPELINE_PYTHON} -m streamlake {command}"
 
 

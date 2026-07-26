@@ -1,9 +1,8 @@
 """Transform logic shared by the batch spine and the streaming arm.
 
-Batch/stream parity is a correctness requirement, not a nicety: if the nightly job and the
-Kafka consumer derive trip keys or apply validity rules differently, the two arms disagree about
-the same trip and the reconciliation test in dbt fails. Both arms import from this module, so
-there is exactly one definition of "what a trip is".
+If the nightly job and the Kafka consumer derive trip keys or apply validity rules differently,
+the two arms disagree about the same trip and the reconciliation test in dbt fails. Both arms
+import from this module, so there is exactly one definition of "what a trip is".
 """
 
 from __future__ import annotations
@@ -61,15 +60,15 @@ TRIP_ID_COLUMNS = (
 
 
 def trip_id_expr(columns: tuple[str, ...] = TRIP_ID_COLUMNS) -> Column:
-    """SHA-256 surrogate key over the trip's identifying columns."""
     from pyspark.sql import functions as F
 
+    # concat_ws drops NULLs instead of propagating them, so a null column would shorten the
+    # string and let two different trips hash to the same id. The sentinel holds the slot.
     parts = [F.coalesce(F.col(c).cast("string"), F.lit("~")) for c in columns]
     return F.sha2(F.concat_ws("|", *parts), 256)
 
 
 def add_ingestion_metadata(df: DataFrame, *, source: str, batch_id: str) -> DataFrame:
-    """Stamp lineage onto every bronze row: where it came from and which run wrote it."""
     from pyspark.sql import functions as F
 
     return (
@@ -81,7 +80,8 @@ def add_ingestion_metadata(df: DataFrame, *, source: str, batch_id: str) -> Data
 
 
 def rename_to_silver(df: DataFrame) -> DataFrame:
-    """Apply the raw -> silver column naming, tolerating columns the month happens to lack."""
+    # Column-by-column rather than a select, because TLC's schema has changed over the years
+    # and a month that is missing one of these must not fail here.
     for raw, silver in RAW_TO_SILVER.items():
         if raw in df.columns and raw != silver:
             df = df.withColumnRenamed(raw, silver)
@@ -147,7 +147,6 @@ def reject_reason(period_start: str, period_end: str) -> Column:
 
 
 def derive_trip_metrics(df: DataFrame) -> DataFrame:
-    """Business-level columns every downstream consumer would otherwise recompute."""
     from pyspark.sql import functions as F
 
     duration_min = (F.unix_timestamp("dropoff_ts") - F.unix_timestamp("pickup_ts")) / F.lit(60.0)
@@ -175,7 +174,6 @@ def derive_trip_metrics(df: DataFrame) -> DataFrame:
 
 
 def enrich_with_zones(df: DataFrame, zones: DataFrame) -> DataFrame:
-    """Broadcast-join the 265-row zone lookup onto pickup and dropoff location ids."""
     from pyspark.sql import functions as F
 
     pickup = zones.select(
@@ -190,6 +188,8 @@ def enrich_with_zones(df: DataFrame, zones: DataFrame) -> DataFrame:
         F.col("zone").alias("dropoff_zone"),
         F.col("service_zone").alias("dropoff_service_zone"),
     )
+    # 265 zones, joined twice. Forcing the broadcast keeps the whole month from shuffling
+    # against a table that fits in a few KB.
     return (
         df.join(F.broadcast(pickup), df.pu_location_id == pickup._pu_id, "left")
         .join(F.broadcast(dropoff), df.do_location_id == dropoff._do_id, "left")

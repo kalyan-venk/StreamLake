@@ -1,14 +1,12 @@
 """The event producer: replay real trips onto Kafka as if they were happening now.
 
-Two design choices worth defending:
+Event time gets rewritten, the payload does not: each trip keeps its real fares, distances and
+zones but is stamped with a fresh ``event_ts``, so the windowed aggregation downstream runs
+against a live clock while the numbers stay real.
 
-* **Event time is rewritten, payload is not.** Each trip keeps its real fares, distances and
-  zones but is stamped with a fresh ``event_ts``. That way the windowed aggregation downstream
-  is exercised against a live clock while the numbers stay real.
-* **The producer misbehaves on purpose.** A configurable share of events is sent twice
-  (``duplicate_rate``) and another share arrives late (``late_rate``). A streaming pipeline that
-  has only ever seen well-behaved input has not been tested — the consumer's dedup and watermark
-  exist precisely for these two cases, and here they get exercised on every run.
+The producer also misbehaves on purpose. A configurable share of events is sent twice
+(``duplicate_rate``) and another share arrives late (``late_rate``). The consumer's dedup and
+watermark exist for exactly those two cases, so every run exercises them.
 """
 
 from __future__ import annotations
@@ -26,8 +24,8 @@ from streamlake.logging_utils import banner, get_logger
 
 log = get_logger(__name__)
 
-# Columns pulled from the curated export to build events. Read with pyarrow, not Spark: the
-# producer should start in a second and hold a few MB, not spin up a JVM.
+# Columns pulled from the curated export to build events. Read with pyarrow so the producer
+# starts in about a second and holds a few MB, instead of booting a JVM to read parquet.
 EVENT_COLUMNS = [
     "trip_id",
     "pickup_ts",
@@ -176,7 +174,7 @@ def run(cfg: Config | None = None, *, max_events: int | None = None) -> dict[str
 
 
 def _write_stats(cfg: Config, stats: dict[str, int]) -> None:
-    """Record what was produced so the consumer's dedup can be checked against it."""
+    # The consumer's dedup is only checkable against what was actually sent.
     reports = cfg.path("reports") / "stream"
     reports.mkdir(parents=True, exist_ok=True)
     path = Path(reports / "producer_latest.json")

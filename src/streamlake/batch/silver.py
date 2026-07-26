@@ -1,18 +1,15 @@
 """Step 3 — silver: conform, enrich, deduplicate, and quarantine.
 
-Three things happen here, and the order matters:
+Order matters. Conforming renames the raw TLC columns and computes the derived metrics
+(duration, speed, tip %) once here instead of in six dashboards. Rows that then break a validity
+rule are *moved*, not dropped: they land in ``silver.trips_quarantine`` tagged with the rule
+that rejected them, so "where did my 4,000 trips go?" has an answer you can query. Finally
+silver keeps one row per ``trip_id``, newest ingestion wins — Iceberg tables are append-friendly
+and Kafka is at-least-once, so duplicates arrive by design.
 
-1. **Conform** — raw TLC column names become the lakehouse's names and derived metrics
-   (duration, speed, tip %) are computed once, centrally, instead of in six dashboards.
-2. **Quarantine** — rows that break a validity rule are *moved*, not dropped. They land in
-   ``silver.trips_quarantine`` with the rule that rejected them, so "where did my 4,000 trips
-   go?" has an answer you can query.
-3. **Deduplicate** — Iceberg tables are append-friendly and Kafka is at-least-once, so silver
-   keeps one row per ``trip_id`` (the newest ingestion wins).
-
-The contract then runs on what survived. Quarantining is a row-level decision; the contract is
-a dataset-level gate — if quarantine swallows more than the configured share of the month, the
-run fails even though every surviving row is individually clean.
+The contract runs on what survived. Quarantining is a row-level decision; the contract is a
+dataset-level gate — if quarantine swallows more than the configured share of the month, the run
+fails even though every surviving row is individually clean.
 """
 
 from __future__ import annotations
@@ -103,7 +100,6 @@ def run(cfg: Config | None = None) -> dict[str, int]:
         .createOrReplace()
     )
 
-    # The zone lookup becomes a proper conformed dimension the warehouse can join to.
     zone_dim = zones.select(
         F.col("location_id").cast("int").alias("location_id"),
         F.col("borough"),

@@ -1,15 +1,12 @@
 """SparkSession factory wired for Iceberg (and optionally Kafka).
 
-Everything that makes Spark "know about" Iceberg lives here:
+Two things make Spark "know about" Iceberg: the SQL extension that adds Iceberg's DDL/DML
+grammar (MERGE INTO, ALTER TABLE ... WRITE ORDERED BY, CALL <catalog>.system.*), and a named
+catalog whose tables are Iceberg tables rather than Hive/Parquet directories.
 
-* the SQL extension that adds Iceberg's DDL/DML grammar (MERGE INTO, ALTER TABLE ... WRITE
-  ORDERED BY, CALL <catalog>.system.*),
-* a named catalog (``lakehouse``) whose tables are Iceberg tables rather than Hive/Parquet
-  directories.
-
-The catalog type is config-driven: ``hadoop`` keeps the metadata pointer file next to the data
-(no external service, works on a laptop and on S3 alike); ``rest`` talks to an Iceberg REST
-catalog such as Polaris/Nessie/Glue-via-REST in a real deployment.
+Catalog type is config-driven. ``hadoop`` keeps the metadata pointer file next to the data, so
+it needs no external service and works the same on a laptop and on S3; ``rest`` talks to an
+Iceberg REST catalog (Polaris, Nessie, Glue-via-REST) in a real deployment.
 """
 
 from __future__ import annotations
@@ -92,7 +89,6 @@ def build_spark(
     streaming: bool = False,
     cfg: Config | None = None,
 ) -> SparkSession:
-    """Create (or reuse) the SparkSession used by every StreamLake job."""
     from pyspark.sql import SparkSession
 
     cfg = cfg or get_config()
@@ -132,7 +128,6 @@ def build_spark(
 
 
 def ensure_namespaces(spark: SparkSession, cfg: Config | None = None) -> None:
-    """Create the bronze/silver/gold/stream namespaces if they do not exist yet."""
     cfg = cfg or get_config()
     for namespace in (cfg.get("lakehouse.namespaces", {}) or {}).values():
         spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {cfg.catalog}.{namespace}")

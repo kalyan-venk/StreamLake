@@ -55,8 +55,8 @@ def run(cfg: Config | None = None) -> dict[str, int]:
 
         df = spark.table(identifier)
         target = cfg.curated_dir(name)
-        # A handful of files, not 200: the warehouse loader reads these directly and small-file
-        # overhead is the classic way a "fast" export becomes a slow load.
+        # coalesce(4) because the warehouse loader reads these files directly, and a few hundred
+        # small parquet files turn a quick export into a slow load.
         df.coalesce(4).write.mode("overwrite").parquet(str(target))
 
         row_count = df.count()
@@ -74,8 +74,8 @@ def run(cfg: Config | None = None) -> dict[str, int]:
         manifest[name] = entry
         log.info("exported %-16s %9d rows -> %s", name, row_count, target)
 
-    # The quarantine table is exported as a *summary*, not row by row: the warehouse needs to
-    # answer "what did we reject and why", not to store every rejected trip a second time.
+    # Quarantine goes out as a summary. The warehouse only has to answer "what did we reject and
+    # why" — storing every rejected trip a second time buys nothing.
     quarantine = cfg.table("silver", "trips_quarantine")
     if spark.catalog.tableExists(quarantine):
         reasons = (

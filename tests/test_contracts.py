@@ -1,8 +1,7 @@
 """Tests for the contract engine.
 
-These run a real local SparkSession against tiny in-memory DataFrames. A mocked Spark would
-prove the Python branches work while proving nothing about the aggregate expressions, which is
-where the engine's actual behaviour lives — so the session is real and the data is three rows.
+Real local SparkSession, three-row in-memory DataFrames. The engine's behaviour lives in the
+aggregate expressions it compiles, which a mocked Spark would not exercise at all.
 """
 
 from __future__ import annotations

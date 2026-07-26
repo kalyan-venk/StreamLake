@@ -27,7 +27,7 @@ ZONES_TABLE = "zones_raw"
 
 
 def period(cfg: Config) -> tuple[str, str]:
-    """First instant of the configured month, and first instant of the next month."""
+    """First instant of the configured month, and first instant of the next one (half-open)."""
     year, month = (int(x) for x in cfg.month.split("-"))
     start = datetime(year, month, 1, tzinfo=UTC)
     end = datetime(year + (month == 12), (month % 12) + 1, 1, tzinfo=UTC)

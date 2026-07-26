@@ -1,13 +1,11 @@
 """Inline SVG chart primitives.
 
-No chart library and no CDN: the dashboard is a single HTML file that opens from disk, works
-offline, and can be committed to the repo as an artifact of a run. Everything here emits SVG
-strings that inherit colour from CSS custom properties, so light and dark mode are one
-stylesheet swap rather than two renders.
+No chart library and no CDN, so the dashboard stays a single HTML file that opens from disk.
+Everything here emits SVG strings that take their colour from CSS custom properties, which makes
+dark mode a stylesheet swap rather than a second render.
 
-Colour choices follow a validated categorical palette: hues are assigned in fixed slot order
-(never cycled), single-series charts use one sequential hue rather than a rainbow, and every
-series is direct-labelled so identity never depends on colour alone.
+Hues are assigned by fixed slot and never cycled, and every series is direct-labelled, so
+identity never depends on colour alone.
 """
 
 from __future__ import annotations
@@ -56,11 +54,8 @@ def hbar(
     label_width: int = 150,
     unit: str = "",
 ) -> str:
-    """Horizontal bars for magnitude comparison across a handful of categories.
-
-    Horizontal rather than vertical because the category labels are place names, and a rotated
-    axis label is a tax the reader pays on every glance.
-    """
+    # Horizontal rather than vertical: the category labels are place names, and vertical bars
+    # would need them rotated.
     if not values:
         return '<p class="empty">no data</p>'
 
@@ -80,7 +75,6 @@ def hbar(
             f"{value_format.format(value)}{escape(unit)}</title>"
             f'<text x="{label_width - 8}" y="{y + 15}" text-anchor="end" class="cat-label">'
             f"{escape(str(label))}</text>"
-            # 4px rounded data-end, anchored flat to the baseline.
             f'<rect x="{label_width}" y="{y + 4}" width="{length:.1f}" height="14" rx="4" '
             f'class="bar" />'
             f'<text x="{label_width + length + 8:.1f}" y="{y + 15}" class="val-label">'
@@ -98,11 +92,8 @@ def multiline(
     height: int = 280,
     y_label: str = "",
 ) -> str:
-    """Multi-series line chart on a single y axis.
-
-    One axis, always. Two measures of different magnitude get two charts — a second y scale lets
-    the author choose where the lines cross, which is a decision the data should be making.
-    """
+    """Multi-series line chart. One y axis only — two measures of different magnitude get two
+    charts, because a second y scale lets the author pick where the lines cross."""
     if not series or not x_labels:
         return '<p class="empty">no data</p>'
 
@@ -125,7 +116,6 @@ def multiline(
         f'preserveAspectRatio="xMinYMin meet">'
     ]
 
-    # Recessive grid: four hairlines, labelled, nothing more.
     for tick in range(5):
         value = y_top * tick / 4
         y = y_at(value)
@@ -154,7 +144,7 @@ def multiline(
                 f'<circle cx="{x_at(i):.1f}" cy="{y_at(v):.1f}" r="7" class="dot series-{slot}">'
                 f"<title>{escape(s.name)} · {escape(str(x_labels[i]))}: {_fmt(v)}</title></circle>"
             )
-        # Direct label at the line end: identity without a legend lookup.
+        # Label at the end of the line, so there is no legend to look up.
         parts.append(
             f'<text x="{x_at(len(s.points) - 1) + 10:.1f}" y="{y_at(s.points[-1]) + 4:.1f}" '
             f'class="series-label series-{slot}">{escape(s.name)}</text>'
@@ -175,7 +165,6 @@ def stacked_bar(
     width: int = 640,
     height: int = 46,
 ) -> str:
-    """A single stacked bar for a part-to-whole split, with a 2px surface gap between segments."""
     total = sum(v for _, v in segments) or 1
     x = 0.0
     gap = 2.0
@@ -200,6 +189,6 @@ def stacked_bar(
 
 
 def status_dot(status: str) -> str:
-    """Status is never colour alone — the dot ships next to its label everywhere it is used."""
+    # Callers always render this next to the status label, never in place of it.
     colour = STATUS.get(status, STATUS["warning"])
     return f'<span class="dot-status" style="background:{colour}"></span>'

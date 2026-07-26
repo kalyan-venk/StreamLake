@@ -1,9 +1,3 @@
-"""Shared test fixtures.
-
-The Spark session here is real, not mocked: the contract engine's behaviour lives in the
-aggregate expressions it compiles, and a mock would assert that the Python around them runs.
-"""
-
 from __future__ import annotations
 
 import os

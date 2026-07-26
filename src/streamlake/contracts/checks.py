@@ -1,10 +1,9 @@
 """Check implementations for the contract engine.
 
-Design note (this is the part worth defending in an interview): every check compiles itself
-into Spark **aggregate expressions** rather than running its own query. The engine collects all
-of them into a single ``df.agg(...)`` call, so validating a table with twenty assertions costs
-one pass over the data, not twenty. Only checks that actually failed pay for a second, filtered
-pass to collect example rows.
+Every check compiles itself into Spark **aggregate expressions** rather than running its own
+query. The engine collects all of them into a single ``df.agg(...)`` call, so validating a table
+with twenty assertions costs one pass over the data, not twenty. Only checks that actually
+failed pay for a second, filtered pass to collect example rows.
 """
 
 from __future__ import annotations
@@ -23,14 +22,12 @@ TOTAL_ROWS = "total_rows"
 
 
 def _slug(text: str) -> str:
-    """Aggregate aliases must be plain identifiers, not the human-readable check label."""
+    # Aggregate aliases must be plain identifiers, not the human-readable check label.
     return "".join(ch if ch.isalnum() else "_" for ch in str(text))
 
 
 @dataclass
 class ValidationContext:
-    """Everything a check may need that is not in the DataFrame itself."""
-
     # Freshness is measured against the *logical* run time, not wall clock: a backfill of
     # January data is not stale just because it is July.
     as_of: datetime = field(default_factory=lambda: datetime.now(UTC))

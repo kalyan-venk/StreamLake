@@ -1,13 +1,13 @@
 """The streaming DAG.
 
-A long-running Structured Streaming query is an awkward fit for a batch scheduler, and this DAG
-does not pretend otherwise: it runs the consumer for a bounded window on a short schedule — a
-supervisor loop with monitoring attached, not an ETL job. The production shape is the Kubernetes
-Deployment in ``infra/k8s`` (``STREAM_RUN_SECONDS=0``, the cluster restarts it). This DAG exists
-so the streaming arm is exercised and *alerted on* from the same place as the batch arm.
+A long-running Structured Streaming query is an awkward fit for a batch scheduler. This runs the
+consumer for a bounded window on a short schedule, which makes it a supervisor loop with
+monitoring attached rather than an ETL job. The production shape is the Kubernetes Deployment in
+``infra/k8s`` (``STREAM_RUN_SECONDS=0``, the cluster restarts it); this DAG exists so the
+streaming arm is exercised and alerted on from the same place as the batch arm.
 
-The task that matters is the last one. A DAG where the consumer starts, exits cleanly and
-processes nothing is a green DAG — ``stream-check`` is what turns that into a red one.
+``stream-check`` is the task that matters. A consumer that starts, processes nothing and exits
+cleanly leaves a green DAG behind it.
 """
 
 from __future__ import annotations

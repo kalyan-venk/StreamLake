@@ -1,12 +1,11 @@
 """Render the BI dashboard from the warehouse marts.
 
-Two pages in one file: **KPIs** (what the data says) and **Pipeline health** (whether you should
-believe it). The second page is the one that justifies the whole project — a freshness monitor
-plus the contract results for the run that produced these numbers. A static chart cannot tell
-you it is showing you three-day-old data; this can.
+Two pages in one file: KPIs (what the data says) and pipeline health (whether you should believe
+it). The second page carries a freshness monitor plus the contract results for the run that
+produced these numbers, so a reader can see they are looking at three-day-old data.
 
-Output is a single self-contained HTML file with no external requests, so it opens from disk,
-survives being emailed, and can be committed as evidence of a run.
+Output is one self-contained HTML file with no external requests, which is why it can be
+committed as evidence of a run.
 """
 
 from __future__ import annotations

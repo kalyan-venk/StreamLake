@@ -1,8 +1,8 @@
 """Step 4 — gold: the aggregates the lakehouse serves directly.
 
-Gold is where Spark earns its keep: wide aggregations over the full month. These tables are the
-lake-side serving layer (and the reference the dbt marts are reconciled against), so they are
-small, denormalised, and answer one question each.
+Wide aggregations over the full month. These tables are the lake-side serving layer, and the
+reference the dbt marts get reconciled against, so each one is small, denormalised, and answers
+a single question.
 """
 
 from __future__ import annotations

@@ -1,9 +1,8 @@
 """Step 1 — land the source data.
 
-Ingestion is deliberately dumb: fetch the bytes, verify them, write a manifest, and stop. No
-parsing, no cleaning. If the download is corrupt or truncated we want to fail here, where the
-error message is "the file is wrong", rather than three hops later where it is "the revenue
-number looks odd".
+Fetch the bytes, verify them, write a manifest, stop. No parsing and no cleaning, so that a
+corrupt or truncated download fails here — where the error is "the file is wrong" — rather than
+three hops later where it is "the revenue number looks odd".
 """
 
 from __future__ import annotations
