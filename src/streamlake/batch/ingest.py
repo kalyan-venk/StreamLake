@@ -1,7 +1,7 @@
-"""Step 1 — land the source data.
+"""Step 1, land the source data.
 
 Fetch the bytes, verify them, write a manifest, stop. No parsing and no cleaning, so that a
-corrupt or truncated download fails here — where the error is "the file is wrong" — rather than
+corrupt or truncated download fails here (where the error is "the file is wrong") rather than
 three hops later where it is "the revenue number looks odd".
 """
 
@@ -62,7 +62,7 @@ def run(cfg: Config | None = None, *, force: bool = False) -> dict[str, str]:
 
     if trips_path.stat().st_size < MIN_TRIPS_BYTES:
         raise RuntimeError(
-            f"{trips_path} is only {trips_path.stat().st_size} bytes — the download failed"
+            f"{trips_path} is only {trips_path.stat().st_size} bytes, the download failed"
         )
 
     manifest = {

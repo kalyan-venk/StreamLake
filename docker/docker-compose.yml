@@ -1,7 +1,7 @@
 # Local infrastructure for Layer 2. Everything here is free and disposable:
 #   docker compose -f docker/docker-compose.yml up -d
 #
-# Kafka runs in KRaft mode — no ZooKeeper, one container. MinIO is optional and only needed if
+# Kafka runs in KRaft mode, no ZooKeeper, one container. MinIO is optional and only needed if
 # you want to prove the lakehouse works against real S3 object storage instead of a local path
 # (see the `minio` profile and docs/RUNBOOK.md).
 

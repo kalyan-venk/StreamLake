@@ -29,7 +29,7 @@ MARTS_SCHEMA = "analytics_marts"
 # them to 6px. Matching the two keeps type sizes consistent across the page.
 CARD_WIDTH = 520
 STREAM_EMPTY = (
-    '<p class="empty">the streaming arm has not been exported yet — '
+    '<p class="empty">the streaming arm has not been exported yet, '
     "run <code>make stream</code> then <code>make export warehouse</code></p>"
 )
 FULL_WIDTH = 1060
@@ -43,7 +43,7 @@ def _connect(cfg: Config):
     if not db_path.is_absolute():
         db_path = cfg.root / db_path
     if not db_path.exists():
-        raise RuntimeError(f"no warehouse at {db_path} — run `make warehouse` and `make dbt`")
+        raise RuntimeError(f"no warehouse at {db_path}, run `make warehouse` and `make dbt`")
     return duckdb.connect(str(db_path), read_only=True)
 
 
@@ -217,7 +217,7 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
     quarantined = sum(q["rows"] for q in data["quarantine"])
     contracts = data["contracts"]
 
-    # --- page 1: KPIs -------------------------------------------------------------------
+    # page 1: KPIs
     tiles = [
         ("Trips", f"{total_trips:,}", f"{cfg.month} · yellow taxi"),
         ("Revenue", f"${charts.compact(total_revenue)}", "total fares collected"),
@@ -297,7 +297,7 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
                 f"${b['avg_ticket']:.2f}",
                 f"{b['avg_distance_mi']:.2f}",
                 f"{b['avg_duration_min']:.1f}",
-                f"{b['avg_tip_pct']:.1f}%" if b["avg_tip_pct"] is not None else "—",
+                f"{b['avg_tip_pct']:.1f}%" if b["avg_tip_pct"] is not None else "-",
             ]
             for b in boroughs
         ],
@@ -319,7 +319,7 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
         align_right={2, 3, 4},
     )
 
-    # --- page 2: pipeline health --------------------------------------------------------
+    # page 2: pipeline health
     status_map = {"fresh": "good", "stale": "warning", "breached": "critical"}
     freshness_table = _table(
         ["Table", "Layer", "Watermark", "Rows", "Lag (h)", "Status"],
@@ -364,7 +364,7 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
     failure_html = (
         "".join(
             f"<li>{charts.status_dot('critical' if f['severity'] == 'error' else 'warning')}"
-            f"<code>{escape(f['contract'])}</code> · <strong>{escape(f['check'])}</strong> — "
+            f"<code>{escape(f['contract'])}</code> · <strong>{escape(f['check'])}</strong>, "
             f"observed {escape(str(f['observed']))}, expected {escape(str(f['expected']))}</li>"
             for f in failures
         )

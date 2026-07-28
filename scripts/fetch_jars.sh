@@ -17,7 +17,7 @@ ARTIFACTS=(
   # These two are transitive dependencies of the Kafka connector. Their versions are not
   # cosmetic: commons-pool2 must be the version the connector was compiled against (2.12.0 adds
   # PoolConfig.setMinEvictableIdleDuration, which the connector calls). Pinning 2.11.1 here made
-  # the local run work — Ivy resolved the right one — while every container crashed with
+  # the local run work (Ivy resolved the right one) while every container crashed with
   # NoSuchMethodError on the first micro-batch.
   "org/apache/kafka/kafka-clients/3.9.1/kafka-clients-3.9.1.jar"
   "org/apache/commons/commons-pool2/2.12.0/commons-pool2-2.12.0.jar"

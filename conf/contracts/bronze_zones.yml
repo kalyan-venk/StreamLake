@@ -3,7 +3,7 @@ dataset: lakehouse.bronze.zones_raw
 layer: bronze
 owner: data-platform
 description: >
-  The TLC zone lookup is a small, slow-moving reference file — which is exactly why it is worth
+  The TLC zone lookup is a small, slow-moving reference file, which is exactly why it is worth
   a contract. A silently truncated lookup would not fail any job; it would just turn thousands
   of trips into "Unknown" zones and quietly move revenue between boroughs on the dashboard.
 

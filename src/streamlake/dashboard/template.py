@@ -127,7 +127,7 @@ PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StreamLake — {month} lakehouse dashboard</title>
+<title>StreamLake: {month} lakehouse dashboard</title>
 <style>{css}</style>
 </head>
 <body>
@@ -148,7 +148,7 @@ PAGE = """<!doctype html>
 
 <h2>Demand</h2>
 <p class="section-note">Where the trips are and when they happen. Every number below is computed
-from the silver table that passed its contract — rows that failed validity rules were
+from the silver table that passed its contract, rows that failed validity rules were
 quarantined upstream and are counted separately on the pipeline-health page.</p>
 
 <div class="grid2">
@@ -157,7 +157,7 @@ quarantined upstream and are counted separately on the pipeline-health page.</p>
     {borough_bar}
   </div>
   <div class="card">
-    <h3>Trips by hour of day — top three boroughs</h3>
+    <h3>Trips by hour of day, top three boroughs</h3>
     {hourly_chart}
   </div>
 </div>
@@ -194,7 +194,7 @@ showing three-day-old numbers, and an aggregate hides a duplicated grain perfect
 are the checks that ran on the data above, and how far behind each table is.</p>
 
 <div class="card">
-  <h3>Data freshness — lag behind the end of the loaded period</h3>
+  <h3>Data freshness: lag behind the end of the loaded period</h3>
   {freshness_table}
 </div>
 
@@ -212,7 +212,7 @@ are the checks that ran on the data above, and how far behind each table is.</p>
     {quarantine_bar}
   </div>
   <div class="card">
-    <h3>Streaming arm — most recent one-minute windows</h3>
+    <h3>Streaming arm: most recent one-minute windows</h3>
     <p class="muted">Kafka &rarr; Structured Streaming &rarr; Iceberg, deduplicated within the watermark.</p>
     {stream_table}
   </div>

@@ -1,14 +1,14 @@
-"""Step 3 — silver: conform, enrich, deduplicate, and quarantine.
+"""Step 3, silver: conform, enrich, deduplicate, and quarantine.
 
 Order matters. Conforming renames the raw TLC columns and computes the derived metrics
 (duration, speed, tip %) once here instead of in six dashboards. Rows that then break a validity
 rule are *moved*, not dropped: they land in ``silver.trips_quarantine`` tagged with the rule
 that rejected them, so "where did my 4,000 trips go?" has an answer you can query. Finally
-silver keeps one row per ``trip_id``, newest ingestion wins — Iceberg tables are append-friendly
+silver keeps one row per ``trip_id``, newest ingestion wins, Iceberg tables are append-friendly
 and Kafka is at-least-once, so duplicates arrive by design.
 
 The contract runs on what survived. Quarantining is a row-level decision; the contract is a
-dataset-level gate — if quarantine swallows more than the configured share of the month, the run
+dataset-level gate, if quarantine swallows more than the configured share of the month, the run
 fails even though every surviving row is individually clean.
 """
 
@@ -137,7 +137,7 @@ def run(cfg: Config | None = None) -> dict[str, int]:
 
     if reject_rate > MAX_REJECT_RATE:
         raise RuntimeError(
-            f"quarantine rate {reject_rate:.2%} exceeds the {MAX_REJECT_RATE:.0%} budget — "
+            f"quarantine rate {reject_rate:.2%} exceeds the {MAX_REJECT_RATE:.0%} budget, "
             "the source changed shape or an upstream rule is wrong; not promoting to gold"
         )
 

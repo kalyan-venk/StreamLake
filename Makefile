@@ -1,4 +1,4 @@
-# StreamLake — every hop of the pipeline, runnable one at a time or all at once.
+# StreamLake: every hop of the pipeline, runnable one at a time or all at once.
 #
 #   make setup      one-time: virtualenv + dependencies
 #   make batch      Layer 1: ingest -> bronze -> silver -> gold -> export -> warehouse -> dbt

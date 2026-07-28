@@ -86,7 +86,7 @@ def summarise(cfg: Config | None = None) -> dict[str, Any]:
     path.write_text(json.dumps(summary, indent=2, default=str))
 
     log.info(
-        "contract summary: %s — %d contracts, %d checks, %d errors, %d warnings -> %s",
+        "contract summary: %s, %d contracts, %d checks, %d errors, %d warnings -> %s",
         summary["status"],
         summary["contracts"],
         summary["checks"],

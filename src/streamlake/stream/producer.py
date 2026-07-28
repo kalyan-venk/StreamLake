@@ -49,7 +49,7 @@ def _source_rows(cfg: Config, limit: int) -> list[dict[str, Any]]:
     curated = cfg.curated_dir("trips")
     if not curated.exists():
         raise RuntimeError(
-            f"{curated} not found — run the batch spine first (`make batch`); the producer "
+            f"{curated} not found, run the batch spine first (`make batch`); the producer "
             "replays real trips rather than inventing them"
         )
     dataset = ds.dataset(str(curated), format="parquet")
@@ -93,7 +93,7 @@ def _events(rows: list[dict[str, Any]], cfg: Config) -> Iterator[tuple[str, dict
         yield row["trip_id"], event
 
         if rng.random() < duplicate_rate:
-            # Same key, same event time, sent twice — exactly what an at-least-once upstream
+            # Same key, same event time, sent twice, exactly what an at-least-once upstream
             # does after a failed ack.
             yield row["trip_id"], dict(event, redelivery=True)
 
@@ -157,7 +157,7 @@ def run(cfg: Config | None = None, *, max_events: int | None = None) -> dict[str
     producer.flush(30)
     elapsed = time.monotonic() - started
     log.info(
-        "produced %d events (%d duplicates) in %.1fs — %.0f events/s, %d delivered, %d failed",
+        "produced %d events (%d duplicates) in %.1fs, %.0f events/s, %d delivered, %d failed",
         sent,
         duplicates,
         elapsed,

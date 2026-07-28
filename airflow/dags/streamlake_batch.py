@@ -39,7 +39,7 @@ def streamlake(command: str) -> str:
 
 DEFAULT_ARGS = {
     "owner": "kalyan",
-    # Retries are for the flaky parts — a download, an object-store write. A contract breach is
+    # Retries are for the flaky parts: a download, an object-store write. A contract breach is
     # not transient: retrying it just fails three times more slowly.
     "retries": 1,
     "retry_delay": timedelta(minutes=2),

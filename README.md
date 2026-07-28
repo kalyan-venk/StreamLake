@@ -1,7 +1,7 @@
 # StreamLake
 
 **An end-to-end streaming lakehouse with enforced data contracts.**
-NYC taxi trips, ingested twice — a nightly batch and a live Kafka stream — into an Apache
+NYC taxi trips, ingested twice (a nightly batch and a live Kafka stream) into an Apache
 Iceberg lakehouse, modelled into a warehouse with dbt, served through a dashboard, orchestrated
 by Airflow. Every hop asserts a contract and fails loudly when the data breaks it.
 
@@ -19,7 +19,7 @@ by Airflow. Every hop asserts a contract and fails loudly when the data breaks i
 
 Everything runs on a laptop for free: local filesystem Iceberg, single-container Kafka, DuckDB
 as the warehouse. The same code points at S3, a real Kafka, and Snowflake by changing
-environment variables — nothing in the pipeline is hardcoded to the local setup.
+environment variables, nothing in the pipeline is hardcoded to the local setup.
 
 ---
 
@@ -29,14 +29,14 @@ Numbers from the run committed in this repo (`_reports/`, `dashboard/build/index
 
 | | |
 |---|---|
-| Source | NYC yellow taxi, 2024-01 — **2,964,624 trips**, 48 MB parquet |
-| Quarantined | **38,491 rows (1.30%)** — negative totals, backwards timestamps, out-of-period pickups |
+| Source | NYC yellow taxi, 2024-01, **2,964,624 trips**, 48 MB parquet |
+| Quarantined | **38,491 rows (1.30%)**: negative totals, backwards timestamps, out-of-period pickups |
 | Silver | **2,926,133 trips**, one row per `trip_id`, 14 contract checks |
 | Gold | 6,940 zone-days · 4,475 borough-hours · 155 payment-day rows |
 | Warehouse | 5 staging views, 5 marts, **46 dbt tests green** |
-| Contracts | **7 contracts, 47 checks** — 0 errors, 2 warnings |
+| Contracts | **7 contracts, 47 checks**: 0 errors, 2 warnings |
 | Streaming | 4,182 events produced → **4,000 counted**; dedup removed exactly the 182 redeliveries |
-| Orchestration | `airflow dags test streamlake_batch` — 9 tasks, green, 66s |
+| Orchestration | `airflow dags test streamlake_batch`, 9 tasks, green, 66s |
 | Kubernetes | consumer `Running 1/1` on kind, contract passing per micro-batch |
 
 ---
@@ -60,7 +60,7 @@ and prints its contract results as it goes.
 
 ## The idea
 
-Most pipelines fail silently. The job succeeds, the dashboard renders, and the number is wrong —
+Most pipelines fail silently. The job succeeds, the dashboard renders, and the number is wrong,
 because a vendor changed a column, a join fanned out, or last night's load only got half the
 rows. Nothing in the stack is looking.
 
@@ -111,8 +111,8 @@ data covers its own period.
 
 ## Layers
 
-### Layer 1 — the batch spine
-`src/streamlake/batch/` — ingest → bronze → silver → gold → export.
+### Layer 1: the batch spine
+`src/streamlake/batch/`, ingest → bronze → silver → gold → export.
 
 Bronze is a faithful copy of the source plus lineage columns (`trip_id`, `source_file`,
 `batch_id`, `ingested_at`); nothing is filtered, because bronze is what you replay from when a
@@ -121,18 +121,18 @@ a reason, deduplicates on `trip_id`, and joins the zone dimension. Gold builds t
 lake serves directly. Tables are Iceberg, partitioned by day, written with dynamic partition
 overwrite so a re-run replaces rather than appends.
 
-### Layer 2 — the streaming arm
-`src/streamlake/stream/` — Kafka → Structured Streaming → Iceberg.
+### Layer 2: the streaming arm
+`src/streamlake/stream/`, Kafka → Structured Streaming → Iceberg.
 
 The producer replays real curated trips with a fresh `event_ts`, and **misbehaves on purpose**:
 5% of events are sent twice and 3% arrive late. A streaming pipeline that has only ever seen
 well-behaved input has not been tested. The consumer uses a 2-minute watermark,
-`dropDuplicatesWithinWatermark`, 1-minute windows, and a `MERGE INTO` sink — not an append,
+`dropDuplicatesWithinWatermark`, 1-minute windows, and a `MERGE INTO` sink, not an append,
 because update mode re-emits a window every time it changes. Contracts run inside `foreachBatch`
 *before* the merge, so a bad batch never advances the Kafka offsets.
 
-### Layer 3 — serving
-dbt marts on DuckDB (or Snowflake — same models, `DBT_TARGET` picks the engine), a static
+### Layer 3: serving
+dbt marts on DuckDB (or Snowflake, same models, `DBT_TARGET` picks the engine), a static
 self-contained dashboard, a Terraform module and Kubernetes manifests for the streaming consumer.
 
 The dbt layer deliberately **recomputes** Spark's daily aggregate in warehouse SQL, and
@@ -145,11 +145,11 @@ than a cent. Duplicating the logic is the point: it turns silent drift into a re
 
 | Path | What is in it |
 |---|---|
-| `conf/contracts/` | The contracts. Start here — they describe the data better than the code does. |
+| `conf/contracts/` | The contracts. Start here, they describe the data better than the code does. |
 | `src/streamlake/contracts/` | The contract engine: spec parsing, checks, the runner, reports. |
 | `src/streamlake/batch/` | Ingest, bronze, silver, gold, export. |
 | `src/streamlake/stream/` | Kafka producer and the Structured Streaming consumer. |
-| `src/streamlake/transforms.py` | Logic shared by both arms — one definition of "what a trip is". |
+| `src/streamlake/transforms.py` | Logic shared by both arms, one definition of "what a trip is". |
 | `dbt/streamlake/` | Staging views, marts, generic tests, and the cross-engine parity test. |
 | `airflow/dags/` | The nightly batch DAG and the streaming supervisor DAG. |
 | `infra/` | Terraform module and kustomize manifests for the Kubernetes deployment. |
@@ -159,8 +159,8 @@ than a cent. Duplicating the logic is the point: it turns silent drift into a re
 
 ## Documentation
 
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — why each component is there, and what it costs.
-- **[docs/DATA_CONTRACTS.md](docs/DATA_CONTRACTS.md)** — every check type, with examples.
-- **[docs/RUNBOOK.md](docs/RUNBOOK.md)** — running it, pointing it at S3/Snowflake, what breaks.
-- **[LEARNING.md](LEARNING.md)** — the layered walkthrough.
-- **[MISTAKES.md](MISTAKES.md)** — bugs found while building this, and what caused them.
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: why each component is there, and what it costs.
+- **[docs/DATA_CONTRACTS.md](docs/DATA_CONTRACTS.md)**: every check type, with examples.
+- **[docs/RUNBOOK.md](docs/RUNBOOK.md)**: running it, pointing it at S3/Snowflake, what breaks.
+- **[LEARNING.md](LEARNING.md)**: the layered walkthrough.
+- **[MISTAKES.md](MISTAKES.md)**: bugs found while building this, and what caused them.

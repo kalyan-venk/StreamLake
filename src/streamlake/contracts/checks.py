@@ -111,9 +111,7 @@ def _missing_columns(spec: CheckSpec, df: DataFrame, columns: list[str]) -> Chec
     )
 
 
-# ---------------------------------------------------------------------------------------
 # schema
-# ---------------------------------------------------------------------------------------
 
 
 @register("schema")
@@ -144,9 +142,7 @@ def _schema(spec: CheckSpec, df: DataFrame, ctx: ValidationContext, uid: int = 0
     return CompiledCheck(spec=spec, aggregates={}, evaluate=evaluate)
 
 
-# ---------------------------------------------------------------------------------------
 # row-level assertions
-# ---------------------------------------------------------------------------------------
 
 
 @register("not_null")

@@ -75,7 +75,7 @@ spec:
             - name: warehouse
               mountPath: /data/warehouse
           # The Spark UI answering on 4040 means the driver is alive. It does not mean the
-          # stream is progressing — that is what the Airflow lag check and the contract on the
+          # stream is progressing, that is what the Airflow lag check and the contract on the
           # stream table are for. A liveness probe cannot tell the difference.
           livenessProbe:
             tcpSocket:

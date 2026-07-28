@@ -3,7 +3,7 @@
 -- A static chart tells you what the data says. This tells you whether the data is still being
 -- produced: for every curated table, how recent its newest record is relative to the end of the
 -- period the pipeline claims to have loaded, and how many hours of lag that represents. A
--- pipeline that silently stopped three days ago renders a perfectly healthy-looking chart —
+-- pipeline that silently stopped three days ago renders a perfectly healthy-looking chart,
 -- this is the model that catches it.
 {% set period_end = var('period_end') %}
 

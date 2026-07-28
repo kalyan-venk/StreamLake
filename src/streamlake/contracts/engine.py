@@ -2,7 +2,7 @@
 
 Every hop of the pipeline (bronze, silver, gold, each streaming micro-batch, and the curated
 export) hands its output to ``validate`` before the next hop is allowed to read it. A breach
-raises :class:`DataContractViolation`, which fails the task, which fails the Airflow DAG — bad
+raises :class:`DataContractViolation`, which fails the task, which fails the Airflow DAG, bad
 data stops moving instead of quietly arriving in a dashboard.
 """
 

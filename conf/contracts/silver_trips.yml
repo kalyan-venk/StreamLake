@@ -3,13 +3,13 @@ dataset: lakehouse.silver.trips
 layer: silver
 owner: data-platform
 description: >
-  The contract that matters. Everything downstream — gold, the warehouse, dbt, the dashboard —
+  The contract that matters. Everything downstream (gold, the warehouse, dbt, the dashboard)
   reads this table and is entitled to assume every assertion below holds. Rows that would break
   these rules were quarantined upstream with a reason; if a breach still reaches here, either a
   quarantine rule has a hole or the source changed shape, and the run must stop.
 
 schema:
-  # strict: an undeclared column is a failure. A new column is not free — it means someone
+  # strict: an undeclared column is a failure. A new column is not free, it means someone
   # changed the transform without updating the contract the consumers read.
   strict: true
   columns:
@@ -113,7 +113,7 @@ checks:
   - type: row_count
     min: 2000000
     max: 4000000
-    description: guards against a silent partial load — a half-empty month still "succeeds" otherwise
+    description: guards against a silent partial load, a half-empty month still "succeeds" otherwise
 
   - type: expression
     expr: dropoff_ts > pickup_ts
@@ -148,7 +148,7 @@ checks:
     severity: warn
     description: >
       Deliberately a warning. A one-minute trip with a mis-recorded distance produces an
-      impossible speed, and that is a data-quality signal worth surfacing — but it is not a
+      impossible speed, and that is a data-quality signal worth surfacing, but it is not a
       reason to stop the pipeline.
 
   - type: accepted_range
@@ -158,7 +158,7 @@ checks:
     severity: warn
     description: >
       A tip larger than the fare is legal but rare. Warning-level because it is a signal about
-      the vendor feed, not a reason to stop the pipeline — and it explains the one borough on
+      the vendor feed, not a reason to stop the pipeline, and it explains the one borough on
       the dashboard with an implausible average tip.
 
   - type: accepted_values

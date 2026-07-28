@@ -101,7 +101,7 @@ def test_accepted_range_excludes_nulls(spark, trips):
     from pyspark.sql import functions as F
 
     # Fares are 10, 20, 30. Null out the 30 and require >= 15: only the 10 is out of range, and
-    # the null must NOT be counted as a violation — that is the not_null check's job, and one
+    # the null must NOT be counted as a violation, that is the not_null check's job, and one
     # failed assertion should point at one root cause.
     with_null = trips.withColumn(
         "fare_amount", F.when(F.col("trip_id") == "c", None).otherwise(F.col("fare_amount"))
@@ -149,7 +149,7 @@ def test_null_rate_threshold(spark, trips):
 
 
 def test_freshness_uses_logical_run_time(trips):
-    """A 2024 backfill is not stale in 2026 — freshness is measured against the run's own clock."""
+    """A 2024 backfill is not stale in 2026, freshness is measured against the run's own clock."""
     recent = run(
         trips,
         CheckSpec(type="freshness", params={"column": "pickup_ts", "max_age": "2 hours"}),

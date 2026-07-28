@@ -1,11 +1,11 @@
 # Image for the streaming consumer.
 #
-# Spark 4 needs a JDK it supports (17 or 21 — not 25), so the base image pins one rather than
+# Spark 4 needs a JDK it supports (17 or 21, not 25), so the base image pins one rather than
 # inheriting whatever the build host has. Dependencies are installed in their own layer above
 # the source so a code change does not re-resolve the whole dependency tree.
 #
 # Noble, not Jammy: Jammy ships Python 3.10 and this project targets 3.11+ (see
-# requires-python). Nothing catches that mismatch at build time — the image builds cleanly and
+# requires-python). Nothing catches that mismatch at build time, the image builds cleanly and
 # then dies on the first import inside the cluster.
 
 FROM eclipse-temurin:17-jre-noble

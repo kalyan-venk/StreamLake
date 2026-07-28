@@ -3,8 +3,8 @@ dataset: lakehouse.gold.daily_zone_kpis
 layer: gold
 owner: analytics
 description: >
-  The lake-side serving table behind the dashboard's zone view. Aggregates hide problems well —
-  a mart with a duplicated grain still renders a perfectly convincing chart — so the grain
+  The lake-side serving table behind the dashboard's zone view. Aggregates hide problems well,
+  a mart with a duplicated grain still renders a perfectly convincing chart, so the grain
   assertion is the important one here.
 
 schema:
@@ -43,7 +43,7 @@ schema:
 checks:
   - type: unique
     columns: [pickup_date, pickup_borough, pickup_zone]
-    description: the declared grain — one row per zone per day, or the KPIs double-count
+    description: the declared grain, one row per zone per day, or the KPIs double-count
   - type: row_count
     min: 1000
     max: 500000

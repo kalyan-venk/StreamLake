@@ -17,7 +17,7 @@ MERGE keyed on the window rather than an append. Append would leave several rows
 and double-count on read.
 
 Each micro-batch is validated *before* it is merged. A breach raises, the batch is not
-committed, and the offsets are not advanced — the streaming equivalent of failing the DAG.
+committed, and the offsets are not advanced, the streaming equivalent of failing the DAG.
 """
 
 from __future__ import annotations
@@ -228,12 +228,12 @@ def run(cfg: Config | None = None, *, run_seconds: int | None = None) -> dict[st
     )
 
     # A bounded run keeps the same code usable from a Makefile, a test, and an Airflow task.
-    # In Kubernetes STREAM_RUN_SECONDS is 0, which means "run until something stops you" — the
+    # In Kubernetes STREAM_RUN_SECONDS is 0, which means "run until something stops you", the
     # Deployment is the supervisor there, not a timer.
     if seconds > 0:
         query.awaitTermination(seconds)
     else:
-        log.info("run_seconds=0 — running until terminated")
+        log.info("run_seconds=0, running until terminated")
         query.awaitTermination()
     progress = query.lastProgress
     query.stop()

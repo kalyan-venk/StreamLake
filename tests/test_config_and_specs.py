@@ -1,4 +1,4 @@
-"""Tests for config loading and contract-spec parsing — no Spark needed."""
+"""Tests for config loading and contract-spec parsing, no Spark needed."""
 
 from __future__ import annotations
 

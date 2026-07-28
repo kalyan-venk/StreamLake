@@ -1,6 +1,6 @@
 # Structured Streaming's checkpoint is the only truly stateful thing in the deployment: it holds
 # the Kafka offsets and the watermark/dedup state. Lose it and the job either replays from the
-# beginning or silently skips the gap — so it gets a volume, not an emptyDir.
+# beginning or silently skips the gap, so it gets a volume, not an emptyDir.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

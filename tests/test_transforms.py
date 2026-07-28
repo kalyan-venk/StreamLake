@@ -165,7 +165,7 @@ def test_enrich_with_zones_defaults_unknown_ids(spark, raw):
     assert row.pickup_borough == "Manhattan"
     assert row.pickup_zone == "Midtown Center"
     # 236 is absent from this tiny lookup: the left join must not drop the trip, and the label
-    # must not be null — a null borough would silently vanish from every grouped dashboard.
+    # must not be null, a null borough would silently vanish from every grouped dashboard.
     assert row.dropoff_borough == "Unknown"
     assert row.dropoff_zone == "Unknown"
 

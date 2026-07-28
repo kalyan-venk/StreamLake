@@ -1,6 +1,6 @@
 {#
     DuckDB and Snowflake spell timestamp difference differently. Adapter dispatch keeps the
-    models identical across both targets instead of forking the SQL — which is the whole point
+    models identical across both targets instead of forking the SQL, which is the whole point
     of running the warehouse layer through dbt rather than raw scripts.
 #}
 

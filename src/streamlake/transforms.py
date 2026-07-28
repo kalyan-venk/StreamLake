@@ -122,7 +122,7 @@ def reject_reason(period_start: str, period_end: str) -> Column:
 
     These are the rules that quarantine a row instead of failing the whole load: individual bad
     trips are a fact of life in TLC data (fares of -$300, dropoffs in 2098). The *contract* is
-    what fails the run — if too many rows land here, or the surviving rows still break an
+    what fails the run, if too many rows land here, or the surviving rows still break an
     assertion, the pipeline stops.
     """
     from pyspark.sql import functions as F

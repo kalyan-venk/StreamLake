@@ -1,8 +1,8 @@
-"""Step 5 — export the curated layer out of the lake, ready for the warehouse.
+"""Step 5, export the curated layer out of the lake, ready for the warehouse.
 
 The lakehouse is the system of record; the warehouse is a serving copy. This step writes the
 handful of tables the warehouse actually needs as plain Parquet, plus a manifest recording row
-counts and watermarks. The manifest is what the loader checks against after loading — if
+counts and watermarks. The manifest is what the loader checks against after loading, if
 Snowflake ends up with fewer rows than the lake exported, the load failed silently and we want
 to know before dbt runs.
 """
@@ -51,7 +51,7 @@ def run(cfg: Config | None = None) -> dict[str, int]:
             if name in OPTIONAL:
                 log.info("skipping %s (not built yet)", identifier)
                 continue
-            raise RuntimeError(f"expected table {identifier} does not exist — run the batch DAG")
+            raise RuntimeError(f"expected table {identifier} does not exist, run the batch DAG")
 
         df = spark.table(identifier)
         target = cfg.curated_dir(name)
@@ -75,7 +75,7 @@ def run(cfg: Config | None = None) -> dict[str, int]:
         log.info("exported %-16s %9d rows -> %s", name, row_count, target)
 
     # Quarantine goes out as a summary. The warehouse only has to answer "what did we reject and
-    # why" — storing every rejected trip a second time buys nothing.
+    # why", storing every rejected trip a second time buys nothing.
     quarantine = cfg.table("silver", "trips_quarantine")
     if spark.catalog.tableExists(quarantine):
         reasons = (

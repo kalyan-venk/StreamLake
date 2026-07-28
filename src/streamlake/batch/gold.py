@@ -1,4 +1,4 @@
-"""Step 4 — gold: the aggregates the lakehouse serves directly.
+"""Step 4, gold: the aggregates the lakehouse serves directly.
 
 Wide aggregations over the full month. These tables are the lake-side serving layer, and the
 reference the dbt marts get reconciled against, so each one is small, denormalised, and answers

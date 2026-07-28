@@ -5,7 +5,7 @@ sources:
     description: >
       Tables the lakehouse exported into the warehouse. These are loaded by
       `streamlake warehouse-load`, which reconciles row counts against the export manifest, so
-      dbt can treat them as trustworthy inputs — the contract engine has already run on the
+      dbt can treat them as trustworthy inputs, the contract engine has already run on the
       Iceberg tables they came from.
     schema: "{{ var('raw_schema') }}"
     tables:

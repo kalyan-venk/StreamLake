@@ -4,7 +4,7 @@ layer: bronze
 owner: data-platform
 description: >
   The landing contract. Bronze is a faithful copy of what NYC TLC published, so this contract
-  asserts almost nothing about data *quality* — it asserts that we received the file we expected:
+  asserts almost nothing about data *quality*, it asserts that we received the file we expected:
   the right columns, the right types, a plausible number of rows, and timestamps that actually
   cover the month we asked for. If this fails, the problem is upstream, not in our code.
 
@@ -56,7 +56,7 @@ checks:
     columns: [trip_id]
     severity: warn
     description: >
-      TLC occasionally republishes byte-identical trips. Warn rather than fail — silver is the
+      TLC occasionally republishes byte-identical trips. Warn rather than fail, silver is the
       layer that guarantees one row per trip.
 
   - type: freshness

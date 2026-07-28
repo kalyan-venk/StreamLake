@@ -3,7 +3,7 @@ dataset: lakehouse.gold.hourly_demand
 layer: gold
 owner: analytics
 description: >
-  Hourly demand by borough — the batch counterpart to the streaming per-minute table. Keeping
+  Hourly demand by borough, the batch counterpart to the streaming per-minute table. Keeping
   both lets the dashboard show the same KPI computed two ways, which is how you notice one arm
   drifting.
 

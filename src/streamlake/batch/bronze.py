@@ -1,4 +1,4 @@
-"""Step 2 — bronze: land the raw file in Iceberg, unchanged except for lineage.
+"""Step 2, bronze: land the raw file in Iceberg, unchanged except for lineage.
 
 Bronze is a faithful copy of the source with four columns bolted on (``trip_id``,
 ``source_file``, ``batch_id``, ``ingested_at``). Nothing is filtered here on purpose: bronze is

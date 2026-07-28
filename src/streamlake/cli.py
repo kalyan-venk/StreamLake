@@ -1,4 +1,4 @@
-"""``python -m streamlake <command>`` — one entrypoint for every job.
+"""``python -m streamlake <command>``. One entrypoint for every job.
 
 Airflow calls these same functions directly (see airflow/dags), so anything you can run by hand
 here is exactly what the DAG runs. There is no second code path that only the scheduler takes.
@@ -116,17 +116,17 @@ def _cmd_stream_check(args: argparse.Namespace) -> object:
     spark = build_spark("stream-check", cfg=cfg)
     table = cfg.table("stream", "trip_metrics_1m")
     if not spark.catalog.tableExists(table):
-        raise RuntimeError(f"{table} does not exist — the stream has never run")
+        raise RuntimeError(f"{table} does not exist, the stream has never run")
 
     latest = spark.sql(f"SELECT max(window_end) AS w FROM {table}").collect()[0]["w"]
     if latest is None:
-        raise RuntimeError(f"{table} is empty — the stream has never produced a window")
+        raise RuntimeError(f"{table} is empty, the stream has never produced a window")
 
     latest = latest if latest.tzinfo else latest.replace(tzinfo=timezone.utc)
     lag_minutes = (datetime.now(timezone.utc) - latest).total_seconds() / 60
     if lag_minutes > args.max_lag_minutes:
         raise RuntimeError(
-            f"stream lag is {lag_minutes:.1f} minutes (limit {args.max_lag_minutes}) — "
+            f"stream lag is {lag_minutes:.1f} minutes (limit {args.max_lag_minutes}), "
             "the consumer is not keeping up, or it is not running at all"
         )
     return {"latest_window_end": latest.isoformat(), "lag_minutes": round(lag_minutes, 2)}

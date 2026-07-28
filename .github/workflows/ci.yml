@@ -94,7 +94,7 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Build only — the image bakes in the Spark runtime jars, so this also verifies that the
+      # Build only, the image bakes in the Spark runtime jars, so this also verifies that the
       # pinned jar versions still exist on Maven Central.
       - uses: docker/build-push-action@v6
         with:

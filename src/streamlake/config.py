@@ -61,8 +61,7 @@ class Config:
         resolved = Path(raw) if Path(raw).is_absolute() else self.root / raw
         return resolved
 
-    # -- derived values ---------------------------------------------------------------
-
+    # derived values
     @property
     def month(self) -> str:
         return str(self.require("dataset.month"))

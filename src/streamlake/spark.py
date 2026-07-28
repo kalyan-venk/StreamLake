@@ -62,7 +62,7 @@ def _pin_python_interpreter() -> None:
 
     Without this, Spark launches workers with whatever `python3` resolves to on PATH. On a
     machine with a newer system Python than the virtualenv, every job that needs a Python worker
-    dies with PYTHON_VERSION_MISMATCH — and it dies at execution time, so it looks like a data
+    dies with PYTHON_VERSION_MISMATCH, and it dies at execution time, so it looks like a data
     problem rather than an environment one.
     """
     os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
@@ -74,7 +74,7 @@ def _pin_driver_timezone() -> None:
 
     Spark computes in the session timezone (UTC here), but ``collect()`` converts timestamps to
     Python datetimes using the *driver machine's* local zone. On a laptop in New York that means
-    a row whose ``pickup_hour`` column says 17 prints its ``pickup_ts`` as 12:26 — the data is
+    a row whose ``pickup_hour`` column says 17 prints its ``pickup_ts`` as 12:26, the data is
     right and the report is a lie. Pinning TZ before the JVM starts removes the discrepancy.
     """
     if os.environ.get("TZ") != "UTC":

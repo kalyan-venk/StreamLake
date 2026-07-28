@@ -24,7 +24,7 @@ schema:
 checks:
   - type: unique
     columns: [location_id]
-    description: the join key — a duplicate here silently multiplies every fact row
+    description: the join key, a duplicate here silently multiplies every fact row
   - type: row_count
     min: 200
     max: 400

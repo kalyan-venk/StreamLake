@@ -92,7 +92,7 @@ def multiline(
     height: int = 280,
     y_label: str = "",
 ) -> str:
-    """Multi-series line chart. One y axis only — two measures of different magnitude get two
+    """Multi-series line chart. One y axis only, two measures of different magnitude get two
     charts, because a second y scale lets the author pick where the lines cross."""
     if not series or not x_labels:
         return '<p class="empty">no data</p>'
