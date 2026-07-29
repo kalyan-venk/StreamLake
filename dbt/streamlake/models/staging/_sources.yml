@@ -7,7 +7,13 @@ sources:
       `streamlake warehouse-load`, which reconciles row counts against the export manifest, so
       dbt can treat them as trustworthy inputs, the contract engine has already run on the
       Iceberg tables they came from.
-    schema: "{{ var('raw_schema') }}"
+    # Source schema is scoped by target so sourcing .env.local (Snowflake secrets)
+    # never poisons the local DuckDB path. On Snowflake the loader writes to
+    # SNOWFLAKE_SCHEMA (RAW), so align to it. On DuckDB use var('raw_schema')
+    # (streamlake_raw), regardless of what env vars happen to be set. Kept here,
+    # not in dbt_project.yml, because dbt renders jinja in this file but not in
+    # dbt_project.yml var values.
+    schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'RAW') if target.name == 'snowflake' else var('raw_schema') }}"
     tables:
       - name: trips
         description: One row per trip, post-quarantine and post-dedup (silver).

@@ -44,6 +44,9 @@ spark:
     - org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.11.0
   streaming_packages:
     - org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.4
+  # Comma-separated extra Maven packages, appended only when set. Used for S3 runs to pull the
+  # Iceberg AWS bundle (see scripts/localstack_env.sh); empty by default so local runs stay lean.
+  extra_packages: ${SPARK_EXTRA_PACKAGES:}
   conf:
     spark.sql.session.timeZone: UTC
     spark.sql.shuffle.partitions: "8"

@@ -1,6 +1,6 @@
 # data + build artifacts (regenerate with `make`)
 data/
-warehouse/
+/warehouse/
 _reports/
 
 logs/

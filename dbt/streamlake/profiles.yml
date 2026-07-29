@@ -11,7 +11,9 @@ streamlake:
       threads: 4
 
     # Same models, same tests, different engine. Set DBT_TARGET=snowflake plus the
-    # SNOWFLAKE_* variables from .env.example.
+    # SNOWFLAKE_* variables from .env.example. The source schema aligns to
+    # SNOWFLAKE_SCHEMA (RAW) automatically on this target (see _sources.yml), so
+    # `source .env.local` is enough; no CLI --vars and no extra env var needed.
     snowflake:
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT', '') }}"

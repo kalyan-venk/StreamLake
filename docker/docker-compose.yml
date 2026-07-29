@@ -85,5 +85,27 @@ services:
       echo 'bucket streamlake ready'
       "
 
+  # LocalStack backs the Terraform module in infra/terraform-localstack: it mocks the AWS APIs
+  # (S3, Glue, IAM, STS) the module provisions against. Kept on its own `localstack` profile so
+  # it never starts with the default Kafka stack. Bring it up with `make localstack-up`, which
+  # uses the repo-scoped compose project name `streamlake-ext` to avoid colliding with the other
+  # local stacks on this machine.
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: streamlake-localstack
+    profiles: ["localstack"]
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,glue,iam,sts
+      DEBUG: "0"
+      DOCKER_HOST: unix:///var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
 volumes:
   minio-data:

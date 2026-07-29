@@ -99,6 +99,11 @@ def build_spark(
     if streaming:
         packages += list(cfg.get("spark.streaming_packages", []) or [])
 
+    # Extra packages for S3-backed runs (the Iceberg AWS bundle), supplied out of band so the
+    # default local-FS and CI unit-test runs stay lean. scripts/localstack_env.sh sets this.
+    extra = str(cfg.get("spark.extra_packages", "") or "")
+    packages += [p.strip() for p in extra.split(",") if p.strip()]
+
     builder = (
         SparkSession.builder.appName(f"{cfg.get('spark.app_name', 'streamlake')}-{app_suffix}")
         .master(str(cfg.get("spark.master", "local[*]")))

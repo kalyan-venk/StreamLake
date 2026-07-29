@@ -10,7 +10,11 @@ target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
 vars:
-  # Schema the lakehouse export lands in. Overridden per warehouse in CI.
+  # DuckDB default schema for the lakehouse export. On the snowflake target the
+  # loader writes to SNOWFLAKE_SCHEMA (RAW); _sources.yml scopes the raw schema by
+  # target and reads SNOWFLAKE_SCHEMA there, so this default only applies to DuckDB.
+  # (dbt does not render jinja in dbt_project.yml var values, so the branch lives
+  # in _sources.yml where jinja is evaluated, not here.)
   raw_schema: streamlake_raw
   # The month the current run covers; the freshness mart measures against its end.
   period_end: "2024-02-01"

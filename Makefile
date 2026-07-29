@@ -141,6 +141,41 @@ tf-apply: ## deploy the streaming consumer via Terraform
 tf-destroy: ## tear it down
 	cd infra/terraform && tofu destroy -auto-approve
 
+# --- localstack + terraform (lakehouse storage as code) ------------------------------------
+# Separate from the K8s module above. The LocalStack target uses a repo-scoped compose project
+# name so it does not collide with the other local stacks running on this machine.
+
+COMPOSE_LS := docker compose -p streamlake-ext -f docker/docker-compose.yml --profile localstack
+TF_LS      := cd infra/terraform-localstack && tofu
+
+.PHONY: localstack-up localstack-down tf-ls-init tf-ls-plan tf-ls-apply tf-ls-destroy tf-ls-output batch-localstack
+localstack-up: ## start LocalStack (S3, Glue, IAM, STS) on localhost:4566
+	$(COMPOSE_LS) up -d localstack
+	@echo "waiting for LocalStack to report healthy..."
+	@until curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1; do sleep 2; done
+	@echo "localstack ready on localhost:4566"
+
+localstack-down: ## stop LocalStack and free port 4566
+	$(COMPOSE_LS) down
+
+tf-ls-init: ## initialise the lakehouse-storage Terraform module
+	$(TF_LS) init -input=false
+
+tf-ls-plan: ## show what the lakehouse-storage module would provision
+	$(TF_LS) plan -input=false
+
+tf-ls-apply: ## provision the lakehouse S3 bucket and IAM against LocalStack (Glue is Pro-only)
+	$(TF_LS) apply -auto-approve -var enable_glue=false
+
+tf-ls-destroy: ## tear down the lakehouse-storage resources
+	$(TF_LS) destroy -auto-approve
+
+tf-ls-output: ## print the module outputs (warehouse_bucket, warehouse_uri, ...)
+	$(TF_LS) output
+
+batch-localstack: ## run the batch spine against the TF-provisioned S3 bucket
+	./scripts/localstack_env.sh $(MAKE) batch
+
 # --- orchestration -------------------------------------------------------------------------
 
 .PHONY: airflow-test airflow-up

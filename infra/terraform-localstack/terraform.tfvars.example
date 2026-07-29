@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars to override defaults. All values below are the defaults.
+localstack_endpoint = "http://localhost:4566"
+region              = "us-east-1"
+bucket_name         = "streamlake-lakehouse"
+warehouse_prefix    = "warehouse"
+glue_database       = "streamlake"
