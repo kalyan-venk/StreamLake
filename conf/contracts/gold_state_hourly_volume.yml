@@ -1,0 +1,39 @@
+name: gold_state_hourly_volume
+dataset: lakehouse.gold.state_hourly_volume
+layer: gold
+owner: analytics
+description: >
+  Hourly transaction volume by cardholder state, the batch counterpart to the streaming
+  per-minute table. Keeping both lets the dashboard show the same kind of KPI computed two ways,
+  which is how you notice one arm drifting.
+
+schema:
+  strict: true
+  columns:
+    - name: trans_hour_ts
+      type: timestamp
+      nullable: false
+    - name: state
+      type: string
+      nullable: false
+    - name: txns
+      type: bigint
+      nullable: false
+    - name: total_amt
+      type: double
+      nullable: false
+    - name: avg_amt
+      type: double
+
+checks:
+  - type: unique
+    columns: [trans_hour_ts, state]
+    description: one row per state-hour
+  - type: row_count
+    min: 1000
+    max: 1000000
+    description: >
+      51 states across two years of hours is up to ~900K possible state-hour combinations; the
+      real data lands around 628K once hours with no activity in a state are excluded.
+  - type: expression
+    expr: txns > 0

@@ -47,7 +47,7 @@ def streamlake(command: str) -> str:
 def streamlake_stream():
     @task.bash
     def produce() -> str:
-        """Replay a slice of curated trips onto the topic so the demo has something to consume."""
+        """Replay a slice of curated transactions onto the topic so the demo has something to consume."""
         return streamlake("produce --max-events 5000")
 
     @task.bash(execution_timeout=timedelta(minutes=10))

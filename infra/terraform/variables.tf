@@ -30,7 +30,7 @@ variable "kafka_bootstrap" {
 
 variable "kafka_topic" {
   type    = string
-  default = "streamlake.trips"
+  default = "streamlake.transactions"
 }
 
 variable "contract_mode" {

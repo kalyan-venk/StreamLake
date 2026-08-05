@@ -16,8 +16,9 @@ vars:
   # (dbt does not render jinja in dbt_project.yml var values, so the branch lives
   # in _sources.yml where jinja is evaluated, not here.)
   raw_schema: streamlake_raw
-  # The month the current run covers; the freshness mart measures against its end.
-  period_end: "2024-02-01"
+  # The end of the period the loaded Sparkov data covers (verified: train+test span
+  # 2019-01-01 through 2020-12-31); the freshness mart measures against this.
+  period_end: "2021-01-01"
 
 models:
   streamlake:

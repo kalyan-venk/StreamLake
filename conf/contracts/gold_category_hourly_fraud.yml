@@ -1,0 +1,55 @@
+name: gold_category_hourly_fraud
+dataset: lakehouse.gold.category_hourly_fraud
+layer: gold
+owner: analytics
+description: >
+  The lake-side serving table behind the dashboard's fraud-by-category view. Aggregates hide
+  problems well, a mart with a duplicated grain still renders a perfectly convincing chart, so
+  the grain assertion is the important one here.
+
+schema:
+  strict: true
+  columns:
+    - name: trans_hour_ts
+      type: timestamp
+      nullable: false
+    - name: category
+      type: string
+      nullable: false
+    - name: txns
+      type: bigint
+      nullable: false
+    - name: fraud_txns
+      type: bigint
+      nullable: false
+    - name: total_amt
+      type: double
+      nullable: false
+    - name: avg_amt
+      type: double
+    - name: fraud_rate
+      type: double
+      nullable: false
+
+checks:
+  - type: unique
+    columns: [trans_hour_ts, category]
+    description: the declared grain, one row per category per hour, or the fraud rate double-counts
+  - type: row_count
+    min: 1000
+    max: 500000
+  - type: expression
+    expr: txns > 0
+    description: an aggregate row with zero transactions means the group-by produced a phantom key
+  - type: expression
+    expr: fraud_txns <= txns
+    description: fraud transactions are a subset of all transactions, never more
+  - type: accepted_range
+    column: fraud_rate
+    min: 0
+    max: 1
+  - type: expression
+    expr: total_amt >= 0
+  - type: freshness
+    column: trans_hour_ts
+    max_age: 3 days

@@ -27,7 +27,8 @@ def _expand(value: Any) -> Any:
 
         def sub(match: re.Match[str]) -> str:
             name, default = match.group(1), match.group(2)
-            return os.environ.get(name) or (default or "")
+            env = os.environ.get(name)
+            return env if env is not None else (default or "")
 
         return _PLACEHOLDER.sub(sub, value)
     if isinstance(value, dict):
@@ -63,15 +64,19 @@ class Config:
 
     # derived values
     @property
-    def month(self) -> str:
-        return str(self.require("dataset.month"))
+    def period_start(self) -> str:
+        return str(self.require("dataset.period_start"))
+
+    @property
+    def period_end(self) -> str:
+        return str(self.require("dataset.period_end"))
 
     @property
     def catalog(self) -> str:
         return str(self.require("lakehouse.catalog"))
 
     def table(self, layer: str, name: str) -> str:
-        """e.g. lakehouse.silver.trips"""
+        """e.g. lakehouse.silver.transactions"""
         namespace = self.require(f"lakehouse.namespaces.{layer}")
         return f"{self.catalog}.{namespace}.{name}"
 
@@ -85,11 +90,16 @@ class Config:
         p.mkdir(parents=True, exist_ok=True)
         return p.as_uri()
 
-    def raw_trips_file(self) -> Path:
-        return self.path("raw") / f"yellow_tripdata_{self.month}.parquet"
+    def raw_train_file(self) -> Path:
+        return self.path("raw") / "credit_card_transaction_train.csv"
 
-    def raw_zones_file(self) -> Path:
-        return self.path("raw") / "taxi_zone_lookup.csv"
+    def raw_test_file(self) -> Path:
+        return self.path("raw") / "credit_card_transaction_test.csv"
+
+    def category_ref_file(self) -> Path:
+        # A small, hand-authored reference (category -> channel), checked into the repo rather
+        # than downloaded: Sparkov ships no such lookup, and 14 rows is not worth a network call.
+        return self.root / "conf" / "reference" / "category_channel.csv"
 
     def curated_dir(self, name: str) -> Path:
         return self.path("curated") / name

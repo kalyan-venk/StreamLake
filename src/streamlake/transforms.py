@@ -1,8 +1,8 @@
 """Transform logic shared by the batch spine and the streaming arm.
 
-If the nightly job and the Kafka consumer derive trip keys or apply validity rules differently,
-the two arms disagree about the same trip and the reconciliation test in dbt fails. Both arms
-import from this module, so there is exactly one definition of "what a trip is".
+If the nightly job and the Kafka consumer derive PII handling or validity rules differently, the
+two arms disagree about the same transaction, and the reconciliation test in dbt fails. Both arms
+import from this module, so there is exactly one definition of "what a clean transaction is".
 """
 
 from __future__ import annotations
@@ -12,229 +12,260 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover
     from pyspark.sql import Column, DataFrame
 
-# Columns as NYC TLC publishes them, mapped to the names the lakehouse uses downstream.
+# Columns as Sparkov publishes them, mapped to the names the lakehouse uses downstream. Sparkov's
+# own `trans_num` is already a natural, globally unique event id (a 32-char hex string), so there
+# is no surrogate key to mint here, unlike a source with no natural per-row identifier.
 RAW_TO_SILVER = {
-    "VendorID": "vendor_id",
-    "tpep_pickup_datetime": "pickup_ts",
-    "tpep_dropoff_datetime": "dropoff_ts",
-    "passenger_count": "passenger_count",
-    "trip_distance": "trip_distance_mi",
-    "RatecodeID": "ratecode_id",
-    "store_and_fwd_flag": "store_and_fwd_flag",
-    "PULocationID": "pu_location_id",
-    "DOLocationID": "do_location_id",
-    "payment_type": "payment_type",
-    "fare_amount": "fare_amount",
-    "extra": "extra",
-    "mta_tax": "mta_tax",
-    "tip_amount": "tip_amount",
-    "tolls_amount": "tolls_amount",
-    "improvement_surcharge": "improvement_surcharge",
-    "total_amount": "total_amount",
-    "congestion_surcharge": "congestion_surcharge",
-    "Airport_fee": "airport_fee",
+    "trans_date_trans_time": "trans_time",
+    "cc_num": "cc_num",
+    "merchant": "merchant",
+    "category": "category",
+    "amt": "amt",
+    "gender": "gender",
+    "city": "city",
+    "state": "state",
+    "zip": "zip",
+    "city_pop": "city_pop",
+    "job": "job",
+    "dob": "dob",
+    "trans_num": "trans_num",
+    "unix_time": "unix_time",
+    "merch_lat": "merch_lat",
+    "merch_long": "merch_long",
+    "is_fraud": "is_fraud",
+    "merch_zipcode": "merch_zipcode",
 }
 
-PAYMENT_TYPES = {
-    1: "credit_card",
-    2: "cash",
-    3: "no_charge",
-    4: "dispute",
-    5: "unknown",
-    6: "voided_trip",
-}
-
-# The source has no natural primary key, so we mint a deterministic surrogate from the
-# immutable facts of the trip. Deterministic means: the same trip hashes to the same id whether
-# it arrives in tonight's parquet file or on the Kafka topic, which is what makes both the
-# batch re-run and the stream idempotent.
-TRIP_ID_COLUMNS = (
-    "VendorID",
-    "tpep_pickup_datetime",
-    "tpep_dropoff_datetime",
-    "PULocationID",
-    "DOLocationID",
-    "trip_distance",
-    "total_amount",
+CATEGORIES = (
+    "entertainment",
+    "food_dining",
+    "gas_transport",
+    "grocery_net",
+    "grocery_pos",
+    "health_fitness",
+    "home",
+    "kids_pets",
+    "misc_net",
+    "misc_pos",
+    "personal_care",
+    "shopping_net",
+    "shopping_pos",
+    "travel",
 )
 
-
-def trip_id_expr(columns: tuple[str, ...] = TRIP_ID_COLUMNS) -> Column:
-    from pyspark.sql import functions as F
-
-    # concat_ws drops NULLs instead of propagating them, so a null column would shorten the
-    # string and let two different trips hash to the same id. The sentinel holds the slot.
-    parts = [F.coalesce(F.col(c).cast("string"), F.lit("~")) for c in columns]
-    return F.sha2(F.concat_ws("|", *parts), 256)
+# A per-row identity check for `trans_num`: 32 lowercase hex characters, the shape Sparkov mints
+# for every row. Not a derivation (the id is already in the source), just a sanity bound so a
+# truncated or re-encoded download fails loudly here rather than three hops later.
+TRANS_NUM_PATTERN = r"^[0-9a-f]{32}$"
 
 
-def add_ingestion_metadata(df: DataFrame, *, source: str, batch_id: str) -> DataFrame:
+def add_ingestion_metadata(df: DataFrame, *, source: str, split: str, batch_id: str) -> DataFrame:
     from pyspark.sql import functions as F
 
     return (
-        df.withColumn("trip_id", trip_id_expr())
-        .withColumn("source_file", F.lit(source))
+        df.withColumn("source_file", F.lit(source))
+        .withColumn("source_split", F.lit(split))
         .withColumn("batch_id", F.lit(batch_id))
         .withColumn("ingested_at", F.current_timestamp())
     )
 
 
 def rename_to_silver(df: DataFrame) -> DataFrame:
-    # Column-by-column rather than a select, because TLC's schema has changed over the years
-    # and a month that is missing one of these must not fail here.
     for raw, silver in RAW_TO_SILVER.items():
         if raw in df.columns and raw != silver:
             df = df.withColumnRenamed(raw, silver)
     return df
 
 
-TIMESTAMP_COLUMNS = ("pickup_ts", "dropoff_ts")
+def normalize_timestamps(df: DataFrame, column: str = "trans_time") -> DataFrame:
+    """Make sure Sparkov's `trans_date_trans_time` is a real timestamp, not a string.
 
-
-def normalize_timestamps(df: DataFrame, columns: tuple[str, ...] = TIMESTAMP_COLUMNS) -> DataFrame:
-    """Cast TLC's zone-less timestamps to real instants.
-
-    The parquet files store TIMESTAMP without a zone, which Spark 4 reads as ``timestamp_ntz``.
-    Under ANSI mode you cannot do arithmetic between an NTZ value and an instant, and comparing
-    the two silently invites the kind of off-by-a-timezone bug that only shows up in a
-    month-boundary partition. The session runs in UTC (see conf/streamlake.yml), so the cast is
-    explicit and consistent everywhere.
+    The CSV stores it as `YYYY-MM-DD HH:MM:SS` with no zone. Spark's own CSV schema inference
+    already recognises that shape and reads the column straight in as `timestamp`, but a plain
+    `.cast("timestamp")` is kept here rather than assumed, so the transform still does the right
+    thing if a future run reads the source with inference off, or from a format that types it as
+    a string. The session runs in UTC (see conf/streamlake.yml), so the cast treats the value as
+    a UTC wall clock, consistent with `unix_time`, which Sparkov also publishes in UTC.
     """
     from pyspark.sql import functions as F
 
-    for column in columns:
-        if column in df.columns:
-            df = df.withColumn(column, F.col(column).cast("timestamp"))
+    if column in df.columns:
+        df = df.withColumn(column, F.col(column).cast("timestamp"))
     return df
 
 
-def payment_type_desc(column: str = "payment_type") -> Column:
-    from pyspark.sql import functions as F
+# --- PII handling -----------------------------------------------------------------------------
+#
+# Sparkov is Faker-generated, not real cardholders, but it is shaped exactly like a real card
+# feed (16-digit PANs, real names, home addresses, dates of birth) and the pipeline treats it the
+# way it would treat the real thing: nothing that identifies a person survives past silver.
+#
+#   cc_num        -> dropped. cc_num_last4 (display) and cc_num_hash (join/velocity key) replace
+#                    it. The hash is salted so the raw PAN cannot be recovered by brute-forcing
+#                    the hash space, and it is stable across ingestions, which is what makes
+#                    "transactions per card per rolling window" possible without ever storing
+#                    the card number itself.
+#   first, last    -> dropped. Not needed by any KPI; carrying them forward only for a "just in
+#                     case" column is exactly how a lakehouse ends up with a name in a fact table.
+#   street         -> dropped, same reason.
+#   dob            -> dropped. Replaced by `cardholder_age`, an integer that is useful for
+#                     analysis and reveals far less than a birth date (which combined with zip
+#                     and gender is a classic re-identification vector).
+#   lat, long      -> dropped after being consumed to compute `distance_km`. The cardholder's
+#                     home coordinates are the most sensitive field in the source; the derived
+#                     distance is the only thing any KPI in this project actually needs from it.
+#   merch_lat/long -> kept. A merchant's location is a business fact, not personal data.
+#   city, state,   -> kept. Coarse geography is how the state-level KPI works, and on its own it
+#   zip, city_pop     does not identify a person the way street+lat/long do.
+#   job            -> kept. An occupation string is shared by many people and carries no direct
+#                     identifier; Sparkov's own job field is deliberately non-identifying.
+#   gender         -> kept, single-letter code, needed nowhere downstream yet but cheap to keep
+#                     and common in fraud-model feature sets.
 
-    mapping = F.create_map(
-        *[x for code, name in PAYMENT_TYPES.items() for x in (F.lit(code), F.lit(name))]
-    )
-    return F.coalesce(mapping[F.col(column)], F.lit("unknown"))
+CC_HASH_SALT_ENV = "STREAMLAKE_PII_SALT"
+_DEFAULT_SALT = "streamlake-local-dev-salt-not-for-production"
 
 
-def reject_reason(period_start: str, period_end: str) -> Column:
-    """First matching validity rule, or NULL when the row is clean.
+def _hash_salt() -> str:
+    import os
 
-    These are the rules that quarantine a row instead of failing the whole load: individual bad
-    trips are a fact of life in TLC data (fares of -$300, dropoffs in 2098). The *contract* is
-    what fails the run, if too many rows land here, or the surviving rows still break an
-    assertion, the pipeline stops.
+    return os.environ.get(CC_HASH_SALT_ENV, _DEFAULT_SALT)
+
+
+def mask_card_number(df: DataFrame, column: str = "cc_num") -> DataFrame:
+    """Replace the raw PAN with a last-4 display column and a salted, non-reversible hash.
+
+    The hash, not the raw number, is what `gold.card_velocity` groups by: it lets the pipeline
+    answer "how many transactions did this card make in the last day" without a card number ever
+    landing in a table past bronze.
     """
     from pyspark.sql import functions as F
 
-    duration_min = (F.unix_timestamp("dropoff_ts") - F.unix_timestamp("pickup_ts")) / F.lit(60.0)
-
+    salt = _hash_salt()
+    as_string = F.col(column).cast("string")
     return (
-        F.when(F.col("pickup_ts").isNull() | F.col("dropoff_ts").isNull(), "missing_timestamp")
-        .when(duration_min <= 0, "non_positive_duration")
-        .when(duration_min > 24 * 60, "duration_over_24h")
+        df.withColumn(f"{column}_last4", F.substring(as_string, -4, 4))
+        .withColumn(f"{column}_hash", F.sha2(F.concat(F.lit(salt), as_string), 256))
+        .drop(column)
+    )
+
+
+def derive_age(df: DataFrame, dob_column: str = "dob", as_of: str | None = None) -> DataFrame:
+    """Years between `dob` and the transaction's own event time, then drop `dob`."""
+    from pyspark.sql import functions as F
+
+    ref = F.col("trans_time") if as_of is None else F.lit(as_of).cast("timestamp")
+    age = F.floor(F.months_between(ref, F.to_date(F.col(dob_column))) / F.lit(12.0))
+    return df.withColumn("cardholder_age", age.cast("int")).drop(dob_column)
+
+
+EARTH_RADIUS_KM = 6371.0088
+
+
+def haversine_km(lat1: str, lon1: str, lat2: str, lon2: str) -> Column:
+    """Great-circle distance between the cardholder's home and the merchant, in kilometres.
+
+    A large cardholder-to-merchant distance is one of the oldest fraud signals there is: a card
+    used a thousand miles from where its owner lives, within the same day, is a pattern worth
+    flagging even before a model sees it. Computed here so both the batch aggregate and the
+    streaming event carry a consistent number.
+    """
+    from pyspark.sql import functions as F
+
+    lat1_r, lon1_r = F.radians(F.col(lat1)), F.radians(F.col(lon1))
+    lat2_r, lon2_r = F.radians(F.col(lat2)), F.radians(F.col(lon2))
+    dlat = lat2_r - lat1_r
+    dlon = lon2_r - lon1_r
+    a = F.pow(F.sin(dlat / 2), 2) + F.cos(lat1_r) * F.cos(lat2_r) * F.pow(F.sin(dlon / 2), 2)
+    c = F.lit(2.0) * F.asin(F.sqrt(a))
+    return F.round(F.lit(EARTH_RADIUS_KM) * c, 3)
+
+
+def strip_home_coordinates(df: DataFrame) -> DataFrame:
+    """Drop the cardholder's raw home coordinates once `distance_km` has been derived from them."""
+    return df.drop("lat", "long")
+
+
+def reject_reason() -> Column:
+    """First matching validity rule, or NULL when the row is clean.
+
+    These are the rules that quarantine a row instead of failing the whole load: a handful of
+    malformed rows is a fact of life in any feed. The *contract* is what fails the run, if too
+    many rows land here, or the surviving rows still break an assertion, the pipeline stops.
+
+    Sparkov is a clean, Faker-generated dataset (no negative amounts, no null trans_num in the
+    published files), so on this source the quarantine count is expected to be small or zero.
+    That is reported honestly rather than manufactured: the rules exist and run on every row,
+    they just do not find much to catch here, which is different from a real production card feed.
+    """
+    from pyspark.sql import functions as F
+
+    bad_id = F.col("trans_num").isNull() | (~F.col("trans_num").rlike(TRANS_NUM_PATTERN))
+    return (
+        F.when(bad_id, "invalid_trans_num")
+        .when(F.col("trans_time").isNull(), "missing_timestamp")
+        .when(F.col("amt").isNull() | (F.col("amt") <= 0), "non_positive_amount")
+        .when(F.col("amt") > 30000, "implausible_amount")
+        .when(~F.col("category").isin(*CATEGORIES), "invalid_category")
+        .when(F.col("is_fraud").isNull() | (~F.col("is_fraud").isin(0, 1)), "invalid_is_fraud_flag")
         .when(
-            (F.col("pickup_ts") < F.lit(period_start).cast("timestamp"))
-            | (F.col("pickup_ts") >= F.lit(period_end).cast("timestamp")),
-            "pickup_outside_period",
+            F.col("merch_lat").isNull()
+            | (F.col("merch_lat") < -90)
+            | (F.col("merch_lat") > 90)
+            | F.col("merch_long").isNull()
+            | (F.col("merch_long") < -180)
+            | (F.col("merch_long") > 180),
+            "invalid_merchant_coordinates",
         )
-        .when(F.col("trip_distance_mi") < 0, "negative_distance")
-        .when(F.col("trip_distance_mi") > 300, "implausible_distance")
-        .when(F.col("total_amount") < 0, "negative_total_amount")
-        .when(F.col("fare_amount") < 0, "negative_fare_amount")
         .otherwise(None)
     )
 
 
-def derive_trip_metrics(df: DataFrame) -> DataFrame:
+def derive_transaction_fields(df: DataFrame) -> DataFrame:
     from pyspark.sql import functions as F
 
-    duration_min = (F.unix_timestamp("dropoff_ts") - F.unix_timestamp("pickup_ts")) / F.lit(60.0)
-
     return (
-        df.withColumn("trip_duration_min", F.round(duration_min, 3))
-        .withColumn(
-            "avg_speed_mph",
-            F.when(
-                F.col("trip_duration_min") > 0,
-                F.round(F.col("trip_distance_mi") / (F.col("trip_duration_min") / 60.0), 3),
-            ),
-        )
-        .withColumn(
-            "tip_pct",
-            F.when(
-                F.col("fare_amount") > 0,
-                F.round(100 * F.col("tip_amount") / F.col("fare_amount"), 3),
-            ),
-        )
-        .withColumn("payment_type_desc", payment_type_desc())
-        .withColumn("pickup_date", F.to_date("pickup_ts"))
-        .withColumn("pickup_hour", F.hour("pickup_ts"))
+        df.withColumn("trans_date", F.to_date("trans_time"))
+        .withColumn("trans_hour", F.hour("trans_time"))
     )
 
 
-def enrich_with_zones(df: DataFrame, zones: DataFrame) -> DataFrame:
+def enrich_with_category(df: DataFrame, category_ref: DataFrame) -> DataFrame:
     from pyspark.sql import functions as F
 
-    pickup = zones.select(
-        F.col("location_id").alias("_pu_id"),
-        F.col("borough").alias("pickup_borough"),
-        F.col("zone").alias("pickup_zone"),
-        F.col("service_zone").alias("pickup_service_zone"),
+    ref = category_ref.select(
+        F.col("category").alias("_cat"),
+        F.col("channel"),
     )
-    dropoff = zones.select(
-        F.col("location_id").alias("_do_id"),
-        F.col("borough").alias("dropoff_borough"),
-        F.col("zone").alias("dropoff_zone"),
-        F.col("service_zone").alias("dropoff_service_zone"),
-    )
-    # 265 zones, joined twice. Forcing the broadcast keeps the whole month from shuffling
-    # against a table that fits in a few KB.
-    return (
-        df.join(F.broadcast(pickup), df.pu_location_id == pickup._pu_id, "left")
-        .join(F.broadcast(dropoff), df.do_location_id == dropoff._do_id, "left")
-        .drop("_pu_id", "_do_id")
-        .withColumn("pickup_zone", F.coalesce("pickup_zone", F.lit("Unknown")))
-        .withColumn("pickup_borough", F.coalesce("pickup_borough", F.lit("Unknown")))
-        .withColumn("dropoff_zone", F.coalesce("dropoff_zone", F.lit("Unknown")))
-        .withColumn("dropoff_borough", F.coalesce("dropoff_borough", F.lit("Unknown")))
-    )
+    return df.join(F.broadcast(ref), df.category == ref._cat, "left").drop("_cat")
 
 
 SILVER_COLUMNS = [
-    "trip_id",
-    "vendor_id",
-    "pickup_ts",
-    "dropoff_ts",
-    "pickup_date",
-    "pickup_hour",
-    "passenger_count",
-    "trip_distance_mi",
-    "trip_duration_min",
-    "avg_speed_mph",
-    "ratecode_id",
-    "store_and_fwd_flag",
-    "pu_location_id",
-    "do_location_id",
-    "pickup_borough",
-    "pickup_zone",
-    "pickup_service_zone",
-    "dropoff_borough",
-    "dropoff_zone",
-    "dropoff_service_zone",
-    "payment_type",
-    "payment_type_desc",
-    "fare_amount",
-    "extra",
-    "mta_tax",
-    "tip_amount",
-    "tip_pct",
-    "tolls_amount",
-    "improvement_surcharge",
-    "congestion_surcharge",
-    "airport_fee",
-    "total_amount",
+    "trans_num",
+    "trans_time",
+    "trans_date",
+    "trans_hour",
+    "unix_time",
+    "cc_num_last4",
+    "cc_num_hash",
+    "merchant",
+    "category",
+    "channel",
+    "amt",
+    "gender",
+    "city",
+    "state",
+    "zip",
+    "city_pop",
+    "job",
+    "cardholder_age",
+    "merch_lat",
+    "merch_long",
+    "distance_km",
+    "is_fraud",
+    "merch_zipcode",
     "source_file",
+    "source_split",
     "batch_id",
     "ingested_at",
 ]

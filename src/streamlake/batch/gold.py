@@ -1,8 +1,8 @@
-"""Step 4, gold: the aggregates the lakehouse serves directly.
+"""Step 4, gold: the fraud KPI aggregates the lakehouse serves directly.
 
-Wide aggregations over the full month. These tables are the lake-side serving layer, and the
-reference the dbt marts get reconciled against, so each one is small, denormalised, and answers
-a single question.
+Wide aggregations over the full history. These tables are the lake-side serving layer and the
+reference two of them get reconciled against in dbt. Each one is small, denormalised, and built
+to answer a single fraud-analytics question.
 """
 
 from __future__ import annotations
@@ -15,9 +15,16 @@ from streamlake.spark import build_spark, ensure_namespaces
 
 log = get_logger(__name__)
 
-DAILY_ZONE_KPIS = "daily_zone_kpis"
-HOURLY_DEMAND = "hourly_demand"
-PAYMENT_MIX = "payment_mix"
+CATEGORY_HOURLY_FRAUD = "category_hourly_fraud"
+STATE_HOURLY_VOLUME = "state_hourly_volume"
+CARD_VELOCITY = "card_velocity"
+MERCHANT_RISK_LEADERBOARD = "merchant_risk_leaderboard"
+GEO_DISTANCE_ANOMALY = "geo_distance_anomaly"
+
+# A merchant needs at least this many transactions in the whole dataset before its fraud rate is
+# meaningful. A merchant with one transaction that happens to be fraud has a 100% fraud rate and
+# tells you nothing; the leaderboard is a ranking, and a ranking of noise is not a ranking.
+MERCHANT_MIN_VOLUME = 20
 
 
 def run(cfg: Config | None = None) -> dict[str, int]:
@@ -26,72 +33,113 @@ def run(cfg: Config | None = None) -> dict[str, int]:
     from pyspark.sql.functions import partitioning as P
 
     cfg = cfg or get_config()
-    banner(log, f"GOLD | month={cfg.month}")
+    banner(log, "GOLD")
 
     spark = build_spark("gold", cfg=cfg)
     ensure_namespaces(spark, cfg)
 
-    trips = spark.table(cfg.table("silver", "trips"))
-    trips.cache()
+    txns = spark.table(cfg.table("silver", "transactions"))
+    txns.cache()
 
-    daily_zone = (
-        trips.groupBy("pickup_date", "pickup_borough", "pickup_zone")
+    # 1. Fraud rate, fraud count and transaction count per category per hour.
+    category_hourly = (
+        txns.withColumn("trans_hour_ts", F.date_trunc("hour", F.col("trans_time")))
+        .groupBy("trans_hour_ts", "category")
         .agg(
-            F.count(F.lit(1)).alias("trips"),
-            F.sum(F.coalesce("passenger_count", F.lit(0))).cast("long").alias("passengers"),
-            F.round(F.sum("total_amount"), 2).alias("revenue"),
-            F.round(F.avg("fare_amount"), 3).alias("avg_fare"),
-            F.round(F.avg("trip_distance_mi"), 3).alias("avg_distance_mi"),
-            F.round(F.avg("trip_duration_min"), 3).alias("avg_duration_min"),
-            F.round(F.avg("avg_speed_mph"), 3).alias("avg_speed_mph"),
-            F.round(F.avg("tip_pct"), 3).alias("avg_tip_pct"),
+            F.count(F.lit(1)).alias("txns"),
+            F.sum(F.col("is_fraud")).cast("long").alias("fraud_txns"),
+            F.round(F.sum("amt"), 2).alias("total_amt"),
+            F.round(F.avg("amt"), 3).alias("avg_amt"),
         )
-        .withColumn("revenue_per_trip", F.round(F.col("revenue") / F.col("trips"), 3))
+        .withColumn("fraud_rate", F.round(F.col("fraud_txns") / F.col("txns"), 6))
     )
-    _write(daily_zone, cfg.table("gold", DAILY_ZONE_KPIS), partition=P.months("pickup_date"))
-
-    hourly = (
-        trips.withColumn("pickup_hour_ts", F.date_trunc("hour", F.col("pickup_ts")))
-        .groupBy("pickup_hour_ts", "pickup_borough")
-        .agg(
-            F.count(F.lit(1)).alias("trips"),
-            F.round(F.sum("total_amount"), 2).alias("revenue"),
-            F.round(F.avg("trip_duration_min"), 3).alias("avg_duration_min"),
-        )
+    _write(
+        category_hourly,
+        cfg.table("gold", CATEGORY_HOURLY_FRAUD),
+        partition=P.days("trans_hour_ts"),
     )
-    _write(hourly, cfg.table("gold", HOURLY_DEMAND), partition=P.days("pickup_hour_ts"))
 
-    payment = (
-        trips.groupBy("pickup_date", "payment_type", "payment_type_desc")
+    # 2. Transaction volume and total amount per state per hour.
+    state_hourly = (
+        txns.withColumn("trans_hour_ts", F.date_trunc("hour", F.col("trans_time")))
+        .groupBy("trans_hour_ts", "state")
         .agg(
-            F.count(F.lit(1)).alias("trips"),
-            F.round(F.sum("total_amount"), 2).alias("revenue"),
-            F.round(F.avg("tip_pct"), 3).alias("avg_tip_pct"),
-        )
-        .withColumn(
-            "trip_share",
-            F.round(F.col("trips") / F.sum("trips").over(Window.partitionBy("pickup_date")), 4),
+            F.count(F.lit(1)).alias("txns"),
+            F.round(F.sum("amt"), 2).alias("total_amt"),
+            F.round(F.avg("amt"), 3).alias("avg_amt"),
         )
     )
-    _write(payment, cfg.table("gold", PAYMENT_MIX))
+    _write(state_hourly, cfg.table("gold", STATE_HOURLY_VOLUME), partition=P.days("trans_hour_ts"))
 
-    trips.unpersist()
+    # 3. Card velocity: transactions per card per day, plus a trailing 7-day rolling count. A
+    # card that suddenly jumps from its usual daily rate is a classic fraud signal on its own,
+    # before any single transaction looks unusual.
+    daily_per_card = txns.groupBy("cc_num_hash", "trans_date").agg(
+        F.count(F.lit(1)).alias("txns_that_day"),
+        F.round(F.sum("amt"), 2).alias("amt_that_day"),
+        F.round(F.max("amt"), 2).alias("max_amt_that_day"),
+    )
+    # rangeBetween works on a numeric ordering, so the date becomes "days since epoch"; that
+    # makes the window a true trailing 7 calendar days even for a card with a gap in activity,
+    # which rowsBetween would get wrong.
+    rolling = Window.partitionBy("cc_num_hash").orderBy(
+        F.datediff(F.col("trans_date"), F.lit("1970-01-01")).cast("long")
+    ).rangeBetween(-6, 0)
+    card_velocity = daily_per_card.withColumn(
+        "txns_trailing_7d", F.sum("txns_that_day").over(rolling)
+    ).withColumn("amt_trailing_7d", F.round(F.sum("amt_that_day").over(rolling), 2))
+    _write(card_velocity, cfg.table("gold", CARD_VELOCITY), partition=P.days("trans_date"))
+
+    # 4. High-risk merchant leaderboard: fraud rate per merchant, gated on a minimum volume so a
+    # single-transaction merchant cannot land a 100% fraud rate at the top.
+    merchant_risk = (
+        txns.groupBy("merchant", "category")
+        .agg(
+            F.count(F.lit(1)).alias("txns"),
+            F.sum(F.col("is_fraud")).cast("long").alias("fraud_txns"),
+            F.round(F.sum("amt"), 2).alias("total_amt"),
+        )
+        .withColumn("fraud_rate", F.round(F.col("fraud_txns") / F.col("txns"), 6))
+        .where(F.col("txns") >= MERCHANT_MIN_VOLUME)
+    )
+    _write(merchant_risk, cfg.table("gold", MERCHANT_RISK_LEADERBOARD))
+
+    # 5. Geo-distance anomaly: how far the transaction happened from the cardholder's home,
+    # fraud vs legitimate, average and the tails (p50/p90/p99) rather than just the mean, because
+    # a mean hides exactly the long-distance outliers this table exists to surface.
+    geo_anomaly = txns.groupBy("is_fraud").agg(
+        F.count(F.lit(1)).alias("txns"),
+        F.round(F.avg("distance_km"), 3).alias("avg_distance_km"),
+        F.round(F.expr("percentile_approx(distance_km, 0.5)"), 3).alias("p50_distance_km"),
+        F.round(F.expr("percentile_approx(distance_km, 0.9)"), 3).alias("p90_distance_km"),
+        F.round(F.expr("percentile_approx(distance_km, 0.99)"), 3).alias("p99_distance_km"),
+    )
+    _write(geo_anomaly, cfg.table("gold", GEO_DISTANCE_ANOMALY))
+
+    txns.unpersist()
 
     enforce(
-        spark.table(cfg.table("gold", DAILY_ZONE_KPIS)),
-        "gold_daily_zone_kpis",
+        spark.table(cfg.table("gold", CATEGORY_HOURLY_FRAUD)),
+        "gold_category_hourly_fraud",
         cfg=cfg,
         stage="gold",
         as_of=as_of(cfg),
     )
     enforce(
-        spark.table(cfg.table("gold", HOURLY_DEMAND)), "gold_hourly_demand", cfg=cfg, stage="gold"
+        spark.table(cfg.table("gold", STATE_HOURLY_VOLUME)),
+        "gold_state_hourly_volume",
+        cfg=cfg,
+        stage="gold",
     )
 
     counts = {
-        DAILY_ZONE_KPIS: spark.table(cfg.table("gold", DAILY_ZONE_KPIS)).count(),
-        HOURLY_DEMAND: spark.table(cfg.table("gold", HOURLY_DEMAND)).count(),
-        PAYMENT_MIX: spark.table(cfg.table("gold", PAYMENT_MIX)).count(),
+        CATEGORY_HOURLY_FRAUD: spark.table(cfg.table("gold", CATEGORY_HOURLY_FRAUD)).count(),
+        STATE_HOURLY_VOLUME: spark.table(cfg.table("gold", STATE_HOURLY_VOLUME)).count(),
+        CARD_VELOCITY: spark.table(cfg.table("gold", CARD_VELOCITY)).count(),
+        MERCHANT_RISK_LEADERBOARD: spark.table(
+            cfg.table("gold", MERCHANT_RISK_LEADERBOARD)
+        ).count(),
+        GEO_DISTANCE_ANOMALY: spark.table(cfg.table("gold", GEO_DISTANCE_ANOMALY)).count(),
     }
     log.info("gold written: %s", counts)
     return counts

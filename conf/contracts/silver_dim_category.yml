@@ -1,0 +1,26 @@
+name: silver_dim_category
+dataset: lakehouse.silver.dim_category
+layer: silver
+owner: data-platform
+description: >
+  The conformed category dimension every mart joins to. Its contract is a uniqueness contract:
+  if category stops being unique, every downstream join fans out and transaction counts inflate
+  without a single job failing.
+
+schema:
+  strict: true
+  columns:
+    - name: category
+      type: string
+      nullable: false
+    - name: channel
+      type: string
+      nullable: false
+
+checks:
+  - type: unique
+    columns: [category]
+    description: the join key, a duplicate here silently multiplies every fact row
+  - type: row_count
+    min: 14
+    max: 14

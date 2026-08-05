@@ -50,10 +50,58 @@ def _catalog_conf(cfg: Config) -> dict[str, str]:
     if cfg.warehouse_uri.startswith("s3"):
         conf[f"{prefix}.io-impl"] = "org.apache.iceberg.aws.s3.S3FileIO"
         if endpoint:
+            # An explicit endpoint means an S3-compatible store that is not real AWS (MinIO
+            # locally). Real AWS S3 leaves this unset and Iceberg's S3FileIO falls back to the
+            # default AWS SDK credential chain, which picks up ~/.aws/credentials on its own.
+            # MinIO has no IAM to hand out session credentials from, so its static
+            # access/secret key pair has to be given to the client explicitly rather than
+            # relying on a chain that assumes a real AWS account is behind it.
             conf[f"{prefix}.s3.endpoint"] = endpoint
             conf[f"{prefix}.s3.path-style-access"] = str(
                 cfg.get("lakehouse.s3.path_style_access", "true")
             ).lower()
+            access_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+            secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+            if access_key and secret_key:
+                conf[f"{prefix}.s3.access-key-id"] = access_key
+                conf[f"{prefix}.s3.secret-access-key"] = secret_key
+            # MinIO has no region concept but the AWS SDK v2 client still requires one to be
+            # set; any value works since MinIO ignores it.
+            conf[f"{prefix}.client.region"] = os.environ.get("AWS_REGION", "us-east-1")
+    return conf
+
+
+def _hadoop_s3a_conf(cfg: Config) -> dict[str, str]:
+    """Hadoop-level S3A configuration, separate from the Iceberg-catalog-scoped one above.
+
+    A ``hadoop`` Iceberg catalog uses Iceberg's own ``S3FileIO`` (configured in
+    ``_catalog_conf``) for table *data* files, but the catalog itself still goes through
+    Hadoop's generic ``FileSystem`` for namespace and table *directory* operations
+    (``getFileStatus``, listing). That path is a different client with its own credential and
+    endpoint configuration, ``spark.hadoop.fs.s3a.*``, and setting only the Iceberg-side
+    properties leaves this half unauthenticated against a non-AWS endpoint like MinIO, a 403
+    at namespace-creation time even though the actual file writes would have worked.
+    """
+    endpoint = str(cfg.get("lakehouse.s3.endpoint", "") or "")
+    if not (cfg.warehouse_uri.startswith("s3") and endpoint):
+        return {}
+
+    ssl_enabled = "false" if endpoint.startswith("http://") else "true"
+    conf = {
+        "spark.hadoop.fs.s3a.endpoint": endpoint,
+        "spark.hadoop.fs.s3a.path.style.access": str(
+            cfg.get("lakehouse.s3.path_style_access", "true")
+        ).lower(),
+        "spark.hadoop.fs.s3a.connection.ssl.enabled": ssl_enabled,
+    }
+    access_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    if access_key and secret_key:
+        conf["spark.hadoop.fs.s3a.access.key"] = access_key
+        conf["spark.hadoop.fs.s3a.secret.key"] = secret_key
+        conf["spark.hadoop.fs.s3a.aws.credentials.provider"] = (
+            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+        )
     return conf
 
 
@@ -74,7 +122,7 @@ def _pin_driver_timezone() -> None:
 
     Spark computes in the session timezone (UTC here), but ``collect()`` converts timestamps to
     Python datetimes using the *driver machine's* local zone. On a laptop in New York that means
-    a row whose ``pickup_hour`` column says 17 prints its ``pickup_ts`` as 12:26, the data is
+    a row whose ``trans_hour`` column says 17 prints its ``trans_time`` as 12:26, the data is
     right and the report is a lie. Pinning TZ before the JVM starts removes the discrepancy.
     """
     if os.environ.get("TZ") != "UTC":
@@ -124,6 +172,8 @@ def build_spark(
     for key, value in (cfg.get("spark.conf", {}) or {}).items():
         builder = builder.config(key, str(value))
     for key, value in _catalog_conf(cfg).items():
+        builder = builder.config(key, value)
+    for key, value in _hadoop_s3a_conf(cfg).items():
         builder = builder.config(key, value)
 
     spark = builder.getOrCreate()

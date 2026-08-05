@@ -1,78 +1,82 @@
 version: 2
 
 models:
-  - name: dim_zone
-    description: Conformed taxi-zone dimension with a coarse zone class for the dashboard.
+  - name: dim_category
+    description: Conformed merchant-category dimension with a card-present/not-present tier for the dashboard.
     columns:
-      - name: location_id
-        description: TLC zone id; the join key for every fact table.
+      - name: category
+        description: Sparkov's merchant category; the join key for every fact table.
         data_tests:
           - unique
           - not_null
-      - name: borough
+      - name: channel
         data_tests:
           - not_null
           - accepted_values:
               arguments:
-                values: ["Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island", "EWR", "Unknown", "N/A"]
-      - name: zone_class
+                values: ["online", "in_person", "general"]
+      - name: category_tier
         data_tests:
           - accepted_values:
               arguments:
-                values: ["Airport", "Core", "Outer"]
+                values: ["card_not_present", "card_present", "general"]
 
-  - name: fct_trip_daily_zone
+  - name: fct_category_hourly_fraud
     description: >
-      Trips, revenue and service quality per pickup zone per day. Recomputed in warehouse SQL
-      from stg_trips so it can be reconciled against Spark's gold table.
+      Transactions, fraud count and fraud rate per merchant category per hour. Recomputed in
+      warehouse SQL from stg_transactions so it can be reconciled against Spark's gold table.
     data_tests:
       # The grain assertion. dbt ships no multi-column uniqueness test, so this is the local
       # generic test in macros/generic_tests.sql.
       - unique_combination:
           arguments:
-            columns: ["pickup_date", "pickup_borough", "pickup_zone"]
+            columns: ["trans_hour_ts", "category"]
     columns:
-      - name: pickup_date
+      - name: trans_hour_ts
         data_tests: [not_null]
-      - name: pickup_zone
+      - name: category
         data_tests: [not_null]
-      - name: trips
+      - name: txns
         data_tests:
           - not_null
           - positive_values
-      - name: revenue
+      - name: fraud_txns
         data_tests: [not_null]
-      - name: card_share_pct
+      - name: total_amt
+        data_tests: [not_null]
+      - name: fraud_rate
         data_tests:
-          - percentage_range
+          - fraction_range
 
-  - name: fct_hourly_demand
-    description: Trips and revenue by borough and hour, with each hour's share of its day.
+  - name: fct_state_hourly_volume
+    description: Transaction volume by cardholder state and hour, with each hour's share of its day.
     data_tests:
       - unique_combination:
           arguments:
-            columns: ["pickup_date", "pickup_hour", "pickup_borough"]
+            columns: ["trans_date", "trans_hour", "state"]
     columns:
-      - name: pickup_hour
+      - name: trans_hour
         data_tests:
           - not_null
           - accepted_values:
               arguments:
                 values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
                 quote: false
-      - name: trips
+      - name: txns
         data_tests: [not_null, positive_values]
-      - name: share_of_borough_day_pct
+      - name: share_of_state_day_pct
         data_tests: [percentage_range]
 
-  - name: mart_borough_summary
-    description: One row per borough for the whole loaded period; the dashboard headline table.
+  - name: mart_category_summary
+    description: One row per merchant category for the whole loaded period; the dashboard headline table.
     columns:
-      - name: pickup_borough
+      - name: category
         data_tests: [unique, not_null]
-      - name: trip_share_pct
+      - name: fraud_rate
+        data_tests: [fraction_range]
+      - name: txn_share_pct
         data_tests: [percentage_range]
-      - name: revenue_share_pct
+      - name: amt_share_pct
         data_tests: [percentage_range]
 
   - name: mart_data_freshness

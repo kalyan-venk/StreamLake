@@ -127,7 +127,7 @@ PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StreamLake: {month} lakehouse dashboard</title>
+<title>StreamLake: card-transaction fraud dashboard</title>
 <style>{css}</style>
 </head>
 <body>
@@ -136,7 +136,7 @@ PAGE = """<!doctype html>
 <header>
   <div>
     <h1>StreamLake</h1>
-    <p class="sub">NYC yellow taxi · {month} · batch and streaming lakehouse with enforced data contracts</p>
+    <p class="sub">Card transactions (Sparkov, 2019-01 to 2020-12) · batch and streaming fraud lakehouse with enforced data contracts</p>
   </div>
   <div style="display:flex;gap:10px;align-items:center">
     <span class="badge">{status_dot}contracts {contract_status_label}</span>
@@ -146,45 +146,48 @@ PAGE = """<!doctype html>
 
 <div class="tiles">{tiles}</div>
 
-<h2>Demand</h2>
-<p class="section-note">Where the trips are and when they happen. Every number below is computed
-from the silver table that passed its contract, rows that failed validity rules were
-quarantined upstream and are counted separately on the pipeline-health page.</p>
+<h2>Fraud by category</h2>
+<p class="section-note">Where the transactions are and how often they turn out to be fraud. Every
+number below is computed from the silver table that passed its contract and had its PII masked;
+rows that failed validity rules were quarantined upstream and are counted separately on the
+pipeline-health page.</p>
 
 <div class="grid2">
   <div class="card">
-    <h3>Trips by borough</h3>
-    {borough_bar}
+    <h3>Transactions by category</h3>
+    {category_bar}
   </div>
   <div class="card">
-    <h3>Trips by hour of day, top three boroughs</h3>
+    <h3>Transactions by hour, top three categories</h3>
     {hourly_chart}
   </div>
 </div>
 
 <div class="card">
-  <h3>Trips per day across the month</h3>
+  <h3>Transactions per day across the loaded period</h3>
   {daily_chart}
 </div>
 
 <div class="card">
-  <h3>Borough detail</h3>
-  {borough_table}
+  <h3>Category detail</h3>
+  {category_table}
 </div>
 
-<h2>Revenue</h2>
-<p class="section-note">Revenue concentration by pickup zone, and how riders pay for it.</p>
+<h2>Risk</h2>
+<p class="section-note">The highest-risk merchants (minimum transaction volume applied so a
+single fraudulent transaction cannot fake a 100% rate), and where transaction volume concentrates
+by cardholder state.</p>
 
 <div class="grid2">
   <div class="card">
-    <h3>Top zones by revenue</h3>
-    {zone_bar}
+    <h3>Highest fraud-rate merchants</h3>
+    {merchant_bar}
   </div>
   <div class="card">
-    <h3>Payment mix by trips</h3>
-    {payment_bar}
-    <h3>Zone detail</h3>
-    {zone_table}
+    <h3>Top states by transaction amount</h3>
+    {state_bar}
+    <h3>Merchant detail</h3>
+    {merchant_table}
   </div>
 </div>
 
@@ -232,18 +235,17 @@ are the checks that ran on the data above, and how far behind each table is.</p>
 
 def render_page(
     *,
-    month: str,
     generated_at: str,
     contract_status: str,
     contract_counts: dict,
     tiles: str,
-    borough_bar: str,
-    borough_table: str,
+    category_bar: str,
+    category_table: str,
     hourly_chart: str,
     daily_chart: str,
-    zone_bar: str,
-    zone_table: str,
-    payment_bar: str,
+    merchant_bar: str,
+    merchant_table: str,
+    state_bar: str,
     freshness_table: str,
     contract_table: str,
     failure_html: str,
@@ -260,18 +262,17 @@ def render_page(
 
     return PAGE.format(
         css=CSS,
-        month=month,
         generated_at=generated_at,
         status_dot=status_dot(status_class),
         contract_status_label=contract_status.replace("_", " ").lower(),
         tiles=tiles,
-        borough_bar=borough_bar,
-        borough_table=borough_table,
+        category_bar=category_bar,
+        category_table=category_table,
         hourly_chart=hourly_chart,
         daily_chart=daily_chart,
-        zone_bar=zone_bar,
-        zone_table=zone_table,
-        payment_bar=payment_bar,
+        merchant_bar=merchant_bar,
+        merchant_table=merchant_table,
+        state_bar=state_bar,
         freshness_table=freshness_table,
         contract_table=contract_table,
         failure_html=failure_html,

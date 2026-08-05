@@ -47,7 +47,7 @@ setup-airflow: ## install Airflow into its own venv (its pins conflict with the 
 # --- layer 1: batch ------------------------------------------------------------------------
 
 .PHONY: ingest bronze silver gold export warehouse dbt batch
-ingest: ## download and checksum the NYC taxi source files
+ingest: ## download and checksum the Sparkov card-transaction source files
 	$(STREAMLAKE) ingest
 
 bronze: ## land the raw file into Iceberg, unchanged
@@ -88,7 +88,7 @@ kafka-down: ## stop the local infrastructure
 minio-up: ## start MinIO, to run the lakehouse against real S3 object storage
 	$(COMPOSE) --profile s3 up -d minio minio-init
 
-produce: ## replay curated trips onto the Kafka topic
+produce: ## replay curated transactions onto the Kafka topic
 	$(STREAMLAKE) produce
 
 consume: ## run the streaming consumer for a bounded window

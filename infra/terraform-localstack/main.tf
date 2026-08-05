@@ -1,7 +1,7 @@
 # StreamLake lakehouse storage, declared as code and provisioned against LocalStack.
 #
 # What this codifies: the S3 bucket that backs the Iceberg warehouse (bronze, silver, gold, and
-# the silver.trips_quarantine reject table all live as prefixes under it), a Glue Data Catalog
+# the silver.transactions_quarantine reject table all live as prefixes under it), a Glue Data Catalog
 # database for those tables, and a minimal IAM role plus read/write policy that a real Spark
 # job would assume in production. On LocalStack the IAM is mocked, so it proves the declaration
 # is valid without incurring cloud cost. The same module runs against real AWS by pointing

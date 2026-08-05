@@ -1,0 +1,179 @@
+name: silver_transactions
+dataset: lakehouse.silver.transactions
+layer: silver
+owner: data-platform
+description: >
+  The contract that matters. Everything downstream (gold, the warehouse, dbt, the dashboard)
+  reads this table and is entitled to assume every assertion below holds, including that no
+  cardholder PII survived the silver hop. Rows that would break these rules were quarantined
+  upstream with a reason; if a breach still reaches here, either a quarantine rule has a hole or
+  the source changed shape, and the run must stop.
+
+schema:
+  # strict: an undeclared column is a failure. A new column is not free, it means someone
+  # changed the transform without updating the contract the consumers read, and for this table
+  # in particular it is also the check that would catch a PII field leaking back in.
+  strict: true
+  columns:
+    - name: trans_num
+      type: string
+      nullable: false
+    - name: trans_time
+      type: timestamp
+      nullable: false
+    - name: trans_date
+      type: date
+      nullable: false
+    - name: trans_hour
+      type: int
+      nullable: false
+    - name: unix_time
+      type: int
+    - name: cc_num_last4
+      type: string
+      nullable: false
+    - name: cc_num_hash
+      type: string
+      nullable: false
+    - name: merchant
+      type: string
+      nullable: false
+    - name: category
+      type: string
+      nullable: false
+    - name: channel
+      type: string
+      nullable: false
+    - name: amt
+      type: double
+      nullable: false
+    - name: gender
+      type: string
+    - name: city
+      type: string
+    - name: state
+      type: string
+      nullable: false
+    - name: zip
+      type: int
+    - name: city_pop
+      type: int
+    - name: job
+      type: string
+    - name: cardholder_age
+      type: int
+    - name: merch_lat
+      type: double
+      nullable: false
+    - name: merch_long
+      type: double
+      nullable: false
+    - name: distance_km
+      type: double
+    - name: is_fraud
+      type: int
+      nullable: false
+    - name: merch_zipcode
+      type: int
+    - name: source_file
+      type: string
+      nullable: false
+    - name: source_split
+      type: string
+      nullable: false
+    - name: batch_id
+      type: string
+      nullable: false
+    - name: ingested_at
+      type: timestamp
+      nullable: false
+
+checks:
+  - type: unique
+    columns: [trans_num]
+    description: >
+      The dedup guarantee. This is the assertion that makes a re-run safe and makes the Kafka
+      arm's at-least-once delivery harmless.
+
+  - type: row_count
+    min: 1500000
+    max: 2000000
+    description: guards against a silent partial load, a half-empty dataset still "succeeds" otherwise
+
+  - type: not_null
+    columns: [cc_num_last4, cc_num_hash]
+    description: >
+      Every card must be identifiable by hash for the velocity table and displayable by its last
+      four digits, even though the full number never lands in this table.
+
+  - type: accepted_range
+    column: amt
+    min: 0
+    max: 30000
+    description: >
+      An absurdity bound, not a business rule. Quarantine already dropped non-positive amounts;
+      this catches the occasional five-figure typo that would still slip past that rule.
+
+  - type: accepted_values
+    column: category
+    values:
+      - entertainment
+      - food_dining
+      - gas_transport
+      - grocery_net
+      - grocery_pos
+      - health_fitness
+      - home
+      - kids_pets
+      - misc_net
+      - misc_pos
+      - personal_care
+      - shopping_net
+      - shopping_pos
+      - travel
+
+  - type: accepted_values
+    column: is_fraud
+    values: [0, 1]
+
+  - type: accepted_range
+    column: merch_lat
+    min: -90
+    max: 90
+
+  - type: accepted_range
+    column: merch_long
+    min: -180
+    max: 180
+
+  - type: accepted_range
+    column: cardholder_age
+    min: 0
+    max: 100
+    severity: warn
+    description: >
+      A negative or triple-digit age means Sparkov's Faker-generated `dob` produced something
+      implausible. Warning-level because it is a data-quality signal about the source, not a
+      reason to stop the pipeline.
+
+  - type: accepted_range
+    column: distance_km
+    min: 0
+    max: 20000
+    severity: warn
+    description: >
+      Half the Earth's circumference is close to the largest distance two coordinates on it can
+      be apart; anything past that means a coordinate is corrupt. Warning-level, same reasoning
+      as the age check.
+
+  - type: null_rate
+    column: merch_zipcode
+    max: 0.30
+    description: >
+      Sparkov leaves this blank for about 15% of rows in the downloaded data; a jump well past
+      that baseline would mean the source changed shape.
+
+  - type: freshness
+    column: trans_time
+    max_age: 3 days
+    description: measured against the end of the period this dataset covers (2021-01-01)

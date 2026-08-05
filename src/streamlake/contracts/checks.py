@@ -336,7 +336,7 @@ def _expression(
     from pyspark.sql import functions as F
 
     expr = str(spec.require("expr"))
-    # A NULL result is treated as a violation: "unknown" is not "satisfied".
+    # A NULL result counts as a violation: a row that cannot prove it passes has failed.
     predicate = f"NOT coalesce({expr}, false)"
     alias = f"c{uid}_expr"
     aggs = {alias: F.sum(F.expr(predicate).cast("long"))}
@@ -381,6 +381,12 @@ def _freshness(
             )
         if isinstance(latest, datetime):
             latest_dt = latest if latest.tzinfo else latest.replace(tzinfo=UTC)
+        elif isinstance(latest, str):
+            # Some sources ship the freshness column as a zone-less string rather than a typed
+            # timestamp. Max on the raw string is still correct for ISO-shaped values
+            # (lexicographic order matches chronological order), so only the parse at evaluation
+            # time needs to handle the string case.
+            latest_dt = datetime.strptime(latest[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
         else:  # date
             latest_dt = datetime(latest.year, latest.month, latest.day, tzinfo=UTC)
         age = (ctx.as_of - latest_dt).total_seconds()

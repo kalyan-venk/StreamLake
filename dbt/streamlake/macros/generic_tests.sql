@@ -29,3 +29,13 @@
     where {{ column_name }} is not null
       and ({{ column_name }} < 0 or {{ column_name }} > 100)
 {% endtest %}
+
+
+{% test fraction_range(model, column_name) %}
+    -- A ratio column (fraud_txns / txns) outside 0-1 means the numerator exceeded the
+    -- denominator, which for a rate that is a subset count of the same total should never happen.
+    select {{ column_name }}
+    from {{ model }}
+    where {{ column_name }} is not null
+      and ({{ column_name }} < 0 or {{ column_name }} > 1)
+{% endtest %}

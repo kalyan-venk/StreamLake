@@ -1,5 +1,5 @@
-name: stream_trip_metrics_1m
-dataset: lakehouse.stream.trip_metrics_1m
+name: stream_txn_metrics_1m
+dataset: lakehouse.stream.txn_metrics_1m
 layer: stream
 owner: data-platform
 description: >
@@ -17,20 +17,19 @@ schema:
     - name: window_end
       type: timestamp
       nullable: false
-    - name: pickup_borough
+    - name: category
       type: string
       nullable: false
-    - name: trips
+    - name: txns
       type: bigint
       nullable: false
-    - name: passengers
+    - name: fraud_txns
       type: bigint
-    - name: revenue
+      nullable: false
+    - name: total_amt
       type: double
       nullable: false
-    - name: avg_fare
-      type: double
-    - name: avg_distance_mi
+    - name: avg_amt
       type: double
     - name: updated_at
       type: timestamp
@@ -38,14 +37,16 @@ schema:
 
 checks:
   - type: unique
-    columns: [window_start, pickup_borough]
+    columns: [window_start, category]
     description: >
-      One row per window per borough. This is the assertion that proves the dedup worked: with
+      One row per window per category. This is the assertion that proves the dedup worked: with
       at-least-once delivery and no dedup, a replayed event lands in a second row for the same
       window.
   - type: expression
     expr: window_end > window_start
   - type: expression
-    expr: trips > 0
+    expr: txns > 0
+  - type: expression
+    expr: fraud_txns <= txns
   - type: row_count
     min: 1

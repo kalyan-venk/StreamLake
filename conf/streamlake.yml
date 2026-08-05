@@ -13,11 +13,16 @@ paths:
   warehouse_db: data/warehouse/streamlake.duckdb
 
 dataset:
-  name: nyc_yellow_taxi
-  # NYC TLC publishes one parquet file per month; the pipeline is month-partitioned.
-  month: ${STREAMLAKE_MONTH:2024-01}
-  trips_url: https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_{month}.parquet
-  zones_url: https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv
+  name: card_transactions_sparkov
+  # Sparkov ships two no-auth CSVs (train + test) rather than one file per period; the pipeline
+  # ingests both and treats them as one dataset.
+  train_url: https://huggingface.co/datasets/pointe77/credit-card-transaction/resolve/main/credit_card_transaction_train.csv?download=true
+  test_url: https://huggingface.co/datasets/pointe77/credit-card-transaction/resolve/main/credit_card_transaction_test.csv?download=true
+  # The half-open date range the combined train+test files actually cover (verified against the
+  # downloaded data: 2019-01-01 through 2020-12-31). Freshness and the "outside period" family of
+  # checks are measured against this, not wall clock.
+  period_start: "2019-01-01"
+  period_end: "2021-01-01"
 
 lakehouse:
   catalog: lakehouse
@@ -56,9 +61,9 @@ spark:
 
 kafka:
   bootstrap_servers: ${KAFKA_BOOTSTRAP:localhost:9092}
-  topic: ${KAFKA_TOPIC:streamlake.trips}
+  topic: ${KAFKA_TOPIC:streamlake.transactions}
   producer:
-    # Replay speed: how many source trips to publish per second.
+    # Replay speed: how many source transactions to publish per second.
     events_per_second: ${PRODUCER_EPS:400}
     max_events: ${PRODUCER_MAX_EVENTS:20000}
     # Fraction of events deliberately re-sent, to prove the consumer's dedup works.

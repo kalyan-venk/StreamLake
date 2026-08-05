@@ -49,7 +49,7 @@ DEFAULT_ARGS = {
 
 @dag(
     dag_id="streamlake_batch",
-    description="NYC taxi -> Iceberg lakehouse -> warehouse -> dbt marts, contract-gated",
+    description="Card transactions -> Iceberg lakehouse -> warehouse -> dbt marts, contract-gated",
     schedule="0 3 * * *",
     start_date=datetime(2024, 1, 1),
     catchup=False,

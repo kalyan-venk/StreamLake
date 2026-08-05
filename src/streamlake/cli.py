@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable
+from datetime import UTC
 
 from streamlake.config import get_config
 from streamlake.logging_utils import get_logger
@@ -84,11 +85,18 @@ def _cmd_warehouse_load(args: argparse.Namespace) -> object:
     return load.run(target=args.target)
 
 
-@command("produce", "replay trips onto the Kafka topic")
+@command("produce", "replay transactions onto the Kafka topic")
 def _cmd_produce(args: argparse.Namespace) -> object:
     from streamlake.stream import producer
 
-    return producer.run(max_events=args.max_events)
+    return producer.run(
+        max_events=args.max_events,
+        skip_events=args.skip_events,
+        force_late_seconds=args.force_late_seconds,
+        duplicate_rate=args.duplicate_rate,
+        late_rate=args.late_rate,
+        label=args.label,
+    )
 
 
 @command("consume", "run the Spark Structured Streaming consumer")
@@ -108,13 +116,13 @@ def _cmd_dashboard(args: argparse.Namespace) -> object:
 @command("stream-check", "fail if the streaming table's newest window is too far behind")
 def _cmd_stream_check(args: argparse.Namespace) -> object:
     """A consumer that starts, processes nothing and exits cleanly leaves a green DAG."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from streamlake.spark import build_spark
 
     cfg = get_config()
     spark = build_spark("stream-check", cfg=cfg)
-    table = cfg.table("stream", "trip_metrics_1m")
+    table = cfg.table("stream", "txn_metrics_1m")
     if not spark.catalog.tableExists(table):
         raise RuntimeError(f"{table} does not exist, the stream has never run")
 
@@ -122,8 +130,8 @@ def _cmd_stream_check(args: argparse.Namespace) -> object:
     if latest is None:
         raise RuntimeError(f"{table} is empty, the stream has never produced a window")
 
-    latest = latest if latest.tzinfo else latest.replace(tzinfo=timezone.utc)
-    lag_minutes = (datetime.now(timezone.utc) - latest).total_seconds() / 60
+    latest = latest if latest.tzinfo else latest.replace(tzinfo=UTC)
+    lag_minutes = (datetime.now(UTC) - latest).total_seconds() / 60
     if lag_minutes > args.max_lag_minutes:
         raise RuntimeError(
             f"stream lag is {lag_minutes:.1f} minutes (limit {args.max_lag_minutes}), "
@@ -165,6 +173,18 @@ def main(argv: list[str] | None = None) -> int:
             sub.add_argument("--target", default=None, choices=["duckdb", "snowflake"])
         if name == "produce":
             sub.add_argument("--max-events", type=int, default=None, dest="max_events")
+            sub.add_argument("--skip-events", type=int, default=0, dest="skip_events")
+            sub.add_argument(
+                "--force-late-seconds",
+                type=int,
+                default=None,
+                dest="force_late_seconds",
+                help="stamp every event this many seconds behind wall clock, deterministically "
+                "(for the late-arrival-drop demo; see docs/RUNBOOK.md)",
+            )
+            sub.add_argument("--duplicate-rate", type=float, default=None, dest="duplicate_rate")
+            sub.add_argument("--late-rate", type=float, default=None, dest="late_rate")
+            sub.add_argument("--label", default="producer", dest="label")
         if name == "consume":
             sub.add_argument("--run-seconds", type=int, default=None, dest="run_seconds")
         if name == "stream-check":

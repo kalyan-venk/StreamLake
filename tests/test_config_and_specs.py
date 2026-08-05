@@ -17,7 +17,9 @@ def test_env_placeholders_are_expanded(tmp_path, monkeypatch):
             """
             paths: {raw: data/raw, curated: data/curated, reports: _reports,
                     checkpoints: checkpoints, warehouse_db: data/w.duckdb}
-            dataset: {month: "${STREAMLAKE_MONTH:2024-01}"}
+            dataset:
+              period_start: "${STREAMLAKE_PERIOD_START:2019-01-01}"
+              period_end: "2021-01-01"
             lakehouse:
               catalog: lakehouse
               warehouse: warehouse
@@ -25,10 +27,10 @@ def test_env_placeholders_are_expanded(tmp_path, monkeypatch):
             """
         )
     )
-    assert load_config(config).month == "2024-01"
+    assert load_config(config).period_start == "2019-01-01"
 
-    monkeypatch.setenv("STREAMLAKE_MONTH", "2024-06")
-    assert load_config(config).month == "2024-06"
+    monkeypatch.setenv("STREAMLAKE_PERIOD_START", "2018-01-01")
+    assert load_config(config).period_start == "2018-01-01"
 
 
 def test_table_identifier_is_fully_qualified(tmp_path):
@@ -37,7 +39,7 @@ def test_table_identifier_is_fully_qualified(tmp_path):
         "paths: {raw: r, curated: c, reports: p, checkpoints: k, warehouse_db: w}\n"
         "lakehouse: {catalog: lakehouse, warehouse: warehouse, namespaces: {silver: silver}}\n"
     )
-    assert load_config(config).table("silver", "trips") == "lakehouse.silver.trips"
+    assert load_config(config).table("silver", "transactions") == "lakehouse.silver.transactions"
 
 
 def test_missing_required_key_raises(tmp_path):

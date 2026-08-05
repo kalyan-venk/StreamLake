@@ -15,30 +15,41 @@ sources:
     # dbt_project.yml var values.
     schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'RAW') if target.name == 'snowflake' else var('raw_schema') }}"
     tables:
-      - name: trips
-        description: One row per trip, post-quarantine and post-dedup (silver).
+      - name: transactions
+        description: One row per card transaction, post-quarantine, post-dedup, PII-masked (silver).
         columns:
-          - name: trip_id
-            description: SHA-256 surrogate key, stable across batch and stream.
+          - name: trans_num
+            description: Sparkov's natural event id, stable across batch and stream.
             data_tests: [unique, not_null]
-          - name: pickup_ts
+          - name: trans_time
             data_tests: [not_null]
-          - name: total_amount
+          - name: amt
+            data_tests: [not_null]
+          - name: cc_num_hash
+            description: Salted hash of the card number; the raw PAN never reaches this layer.
             data_tests: [not_null]
 
-      - name: dim_zone
-        description: TLC taxi zone lookup, conformed.
+      - name: dim_category
+        description: Sparkov merchant-category reference, conformed, with an online/in-person/general channel.
         columns:
-          - name: location_id
+          - name: category
             data_tests: [unique, not_null]
 
-      - name: daily_zone_kpis
+      - name: category_hourly_fraud
         description: >
-          Spark's own daily aggregation. dbt rebuilds the same numbers independently in
-          fct_trip_daily_zone; the two are compared by tests/assert_batch_spark_dbt_parity.sql.
+          Spark's own fraud-rate-by-category-by-hour aggregation. dbt rebuilds the same numbers
+          independently in fct_category_hourly_fraud; the two are compared by
+          tests/assert_batch_spark_dbt_parity.sql.
 
-      - name: hourly_demand
-        description: Spark's hourly borough aggregation.
+      - name: state_hourly_volume
+        description: Spark's hourly cardholder-state volume aggregation.
 
-      - name: payment_mix
-        description: Daily payment-type split.
+      - name: merchant_risk_leaderboard
+        description: Spark's fraud-rate-per-merchant leaderboard, gated on a minimum transaction volume.
+        columns:
+          - name: merchant
+            data_tests: [not_null]
+          - name: txns
+            data_tests: [not_null, positive_values]
+          - name: fraud_rate
+            data_tests: [not_null, fraction_range]

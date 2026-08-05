@@ -9,29 +9,29 @@
 
 with watermarks as (
 
-    select 'trips'            as table_name, 'silver'  as layer,
-           cast(max(pickup_ts) as timestamp) as watermark_ts, count(*) as row_count
-    from {{ ref('stg_trips') }}
+    select 'transactions'          as table_name, 'silver'  as layer,
+           cast(max(trans_time) as timestamp) as watermark_ts, count(*) as row_count
+    from {{ ref('stg_transactions') }}
 
     union all
-    select 'daily_zone_kpis', 'gold',
-           cast(max(pickup_date) as timestamp), count(*)
-    from {{ ref('stg_spark_daily_zone_kpis') }}
+    select 'category_hourly_fraud', 'gold',
+           cast(max(trans_hour_ts) as timestamp), count(*)
+    from {{ ref('stg_spark_category_hourly_fraud') }}
 
     union all
-    select 'hourly_demand', 'gold',
-           cast(max(pickup_hour_ts) as timestamp), count(*)
-    from {{ ref('stg_spark_hourly_demand') }}
+    select 'state_hourly_volume', 'gold',
+           cast(max(trans_hour_ts) as timestamp), count(*)
+    from {{ ref('stg_spark_state_hourly_volume') }}
 
     union all
-    select 'payment_mix', 'gold',
-           cast(max(pickup_date) as timestamp), count(*)
-    from {{ ref('stg_payment_mix') }}
+    select 'merchant_risk_leaderboard', 'gold',
+           cast('{{ period_end }}' as timestamp), count(*)
+    from {{ ref('stg_merchant_risk') }}
 
     union all
-    select 'fct_trip_daily_zone', 'mart',
-           cast(max(pickup_date) as timestamp), count(*)
-    from {{ ref('fct_trip_daily_zone') }}
+    select 'fct_category_hourly_fraud', 'mart',
+           cast(max(trans_hour_ts) as timestamp), count(*)
+    from {{ ref('fct_category_hourly_fraud') }}
 
 )
 

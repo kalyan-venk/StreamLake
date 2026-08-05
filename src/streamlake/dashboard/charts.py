@@ -20,7 +20,6 @@ SERIES_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500"]
 STATUS = {
     "good": "#0ca30c",
     "warning": "#fab219",
-    "serious": "#ec835a",
     "critical": "#d03b3b",
 }
 

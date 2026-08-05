@@ -67,69 +67,70 @@ def _contract_summary(cfg: Config) -> dict[str, Any]:
 def collect(cfg: Config) -> dict[str, Any]:
     con = _connect(cfg)
     try:
-        boroughs = _rows(
+        categories = _rows(
             con,
             f"""
-            SELECT pickup_borough, trips, revenue, avg_ticket, avg_distance_mi,
-                   avg_duration_min, avg_tip_pct, trip_share_pct, revenue_share_pct,
-                   first_pickup_ts, last_pickup_ts
-            FROM {MARTS_SCHEMA}.mart_borough_summary
-            ORDER BY trips DESC
+            SELECT category, txns, fraud_txns, fraud_rate, total_amt, avg_amt,
+                   txn_share_pct, amt_share_pct, first_trans_time, last_trans_time
+            FROM {MARTS_SCHEMA}.mart_category_summary
+            ORDER BY txns DESC
             """,
         )
 
-        top_boroughs = [b["pickup_borough"] for b in boroughs[:3]]
-        quoted = ", ".join(f"'{b}'" for b in top_boroughs) or "''"
+        top_categories = [c["category"] for c in categories[:3]]
+        quoted = ", ".join(f"'{c}'" for c in top_categories) or "''"
         hourly = _rows(
             con,
             f"""
-            SELECT pickup_hour, pickup_borough, sum(trips) AS trips
-            FROM {MARTS_SCHEMA}.fct_hourly_demand
-            WHERE pickup_borough IN ({quoted})
+            SELECT trans_hour_ts, category, sum(txns) AS txns
+            FROM {MARTS_SCHEMA}.fct_category_hourly_fraud
+            WHERE category IN ({quoted})
             GROUP BY 1, 2
             ORDER BY 1
+            LIMIT 3000
             """,
         )
 
-        zones = _rows(
+        merchants = _rows(
             con,
             f"""
-            SELECT pickup_zone, pickup_borough, sum(trips) AS trips,
-                   round(sum(revenue), 2) AS revenue,
-                   round(sum(revenue) / sum(trips), 2) AS revenue_per_trip
-            FROM {MARTS_SCHEMA}.fct_trip_daily_zone
-            GROUP BY 1, 2
-            ORDER BY revenue DESC
+            SELECT merchant, category, txns, fraud_txns,
+                   round(fraud_rate * 100, 2) AS fraud_rate_pct
+            FROM {STAGING_SCHEMA}.stg_merchant_risk
+            ORDER BY fraud_rate DESC, txns DESC
             LIMIT 12
             """,
         )
 
-        payments = _rows(
+        states = _rows(
             con,
             f"""
-            SELECT payment_type_desc, sum(trips) AS trips, round(sum(revenue), 2) AS revenue
-            FROM {STAGING_SCHEMA}.stg_payment_mix
+            SELECT state, sum(txns) AS txns, round(sum(total_amt), 2) AS total_amt
+            FROM {MARTS_SCHEMA}.fct_state_hourly_volume
             GROUP BY 1
-            ORDER BY trips DESC
+            ORDER BY total_amt DESC
+            LIMIT 12
             """,
         )
 
         coverage = _rows(
             con,
             f"""
-            SELECT count(DISTINCT pickup_zone) AS zones,
-                   count(DISTINCT pickup_borough) AS boroughs,
-                   min(pickup_date) AS first_date,
-                   max(pickup_date) AS last_date
-            FROM {MARTS_SCHEMA}.fct_trip_daily_zone
+            SELECT
+                (SELECT count(DISTINCT category)
+                 FROM {MARTS_SCHEMA}.fct_category_hourly_fraud)  AS categories,
+                (SELECT count(DISTINCT merchant)
+                 FROM {STAGING_SCHEMA}.stg_merchant_risk)        AS merchants
             """,
         )[0]
 
         daily = _rows(
             con,
             f"""
-            SELECT pickup_date, sum(trips) AS trips, round(sum(revenue), 2) AS revenue
-            FROM {MARTS_SCHEMA}.fct_trip_daily_zone
+            SELECT date_trunc('day', trans_hour_ts) AS trans_date,
+                   sum(txns) AS txns, sum(fraud_txns) AS fraud_txns,
+                   round(sum(total_amt), 2) AS total_amt
+            FROM {MARTS_SCHEMA}.fct_category_hourly_fraud
             GROUP BY 1
             ORDER BY 1
             """,
@@ -160,14 +161,14 @@ def collect(cfg: Config) -> dict[str, Any]:
         stream: list[dict[str, Any]] = []
         stream_exists = con.execute(
             "SELECT count(*) FROM information_schema.tables "
-            f"WHERE table_schema = '{raw_schema}' AND table_name = 'trip_metrics_1m'"
+            f"WHERE table_schema = '{raw_schema}' AND table_name = 'txn_metrics_1m'"
         ).fetchone()[0]
         if stream_exists:
             stream = _rows(
                 con,
                 f"""
-                SELECT window_start, pickup_borough, trips, revenue
-                FROM {raw_schema}.trip_metrics_1m
+                SELECT window_start, category, txns, fraud_txns, total_amt
+                FROM {raw_schema}.txn_metrics_1m
                 ORDER BY window_start DESC
                 LIMIT 20
                 """,
@@ -176,11 +177,11 @@ def collect(cfg: Config) -> dict[str, Any]:
         con.close()
 
     return {
-        "boroughs": boroughs,
+        "categories": categories,
         "coverage": coverage,
         "hourly": hourly,
-        "zones": zones,
-        "payments": payments,
+        "merchants": merchants,
+        "states": states,
         "daily": daily,
         "freshness": freshness,
         "quarantine": quarantine,
@@ -210,27 +211,30 @@ def _table(
 
 
 def build_html(data: dict[str, Any], cfg: Config) -> str:
-    boroughs = data["boroughs"]
-    total_trips = sum(b["trips"] for b in boroughs)
-    total_revenue = sum(b["revenue"] for b in boroughs)
-    avg_ticket = total_revenue / total_trips if total_trips else 0
+    categories = data["categories"]
+    total_txns = sum(c["txns"] for c in categories)
+    total_fraud = sum(c["fraud_txns"] for c in categories)
+    total_amt = sum(c["total_amt"] for c in categories)
+    fraud_rate = total_fraud / total_txns if total_txns else 0
     quarantined = sum(q["rows"] for q in data["quarantine"])
     contracts = data["contracts"]
 
     # page 1: KPIs
     tiles = [
-        ("Trips", f"{total_trips:,}", f"{cfg.month} · yellow taxi"),
-        ("Revenue", f"${charts.compact(total_revenue)}", "total fares collected"),
-        ("Average ticket", f"${avg_ticket:,.2f}", "revenue per trip"),
+        ("Transactions", f"{total_txns:,}", "card_transactions_sparkov · 2019-01 to 2020-12"),
+        ("Fraud rate", f"{100 * fraud_rate:.3f}%", f"{total_fraud:,} flagged of {total_txns:,}"),
+        ("Total amount", f"${charts.compact(total_amt)}", "sum of amt across all transactions"),
         (
-            "Zones covered",
-            f"{data['coverage']['zones']}",
-            f"pickup zones across {data['coverage']['boroughs']} boroughs",
+            "Categories covered",
+            f"{data['coverage']['categories']}",
+            f"across {data['coverage']['merchants']:,} merchants in the leaderboard",
         ),
         (
             "Quarantined",
             f"{quarantined:,}",
-            f"{100 * quarantined / (total_trips + quarantined):.2f}% of ingested rows",
+            f"{100 * quarantined / (total_txns + quarantined):.4f}% of ingested rows"
+            if (total_txns + quarantined)
+            else "0.00%",
         ),
     ]
     tile_html = "".join(
@@ -240,81 +244,83 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
         for label, value, note in tiles
     )
 
-    borough_bar = charts.hbar(
-        [b["pickup_borough"] for b in boroughs],
-        [float(b["trips"]) for b in boroughs],
+    category_bar = charts.hbar(
+        [c["category"] for c in categories],
+        [float(c["txns"]) for c in categories],
         width=CARD_WIDTH,
-        label_width=120,
+        label_width=130,
     )
 
-    hours = sorted({h["pickup_hour"] for h in data["hourly"]})
+    hours = sorted({h["trans_hour_ts"] for h in data["hourly"]})
     series = []
-    for slot, borough in enumerate(dict.fromkeys(h["pickup_borough"] for h in data["hourly"])):
+    for slot, category in enumerate(dict.fromkeys(h["category"] for h in data["hourly"])):
         by_hour = {
-            h["pickup_hour"]: float(h["trips"])
+            h["trans_hour_ts"]: float(h["txns"])
             for h in data["hourly"]
-            if h["pickup_borough"] == borough
+            if h["category"] == category
         }
-        series.append(charts.Series(borough, [by_hour.get(hour, 0.0) for hour in hours], slot))
+        series.append(charts.Series(category, [by_hour.get(hour, 0.0) for hour in hours], slot))
     hourly_chart = charts.multiline(
-        [f"{h:02d}" for h in hours],
+        [str(h)[5:13] for h in hours],
         series,
         width=CARD_WIDTH,
         height=300,
-        y_label="trips per hour of day",
+        y_label="transactions per hour, top 3 categories",
     )
 
-    zone_bar = charts.hbar(
-        [z["pickup_zone"] for z in data["zones"]],
-        [float(z["revenue"]) for z in data["zones"]],
-        value_format="${:,.0f}",
+    merchant_bar = charts.hbar(
+        [m["merchant"].replace("fraud_", "") for m in data["merchants"]],
+        [float(m["fraud_rate_pct"]) for m in data["merchants"]],
+        value_format="{:.1f}",
+        unit="%",
         width=CARD_WIDTH,
         label_width=190,
     )
 
-    payment_bar = charts.stacked_bar(
-        [(p["payment_type_desc"], float(p["trips"])) for p in data["payments"]],
+    state_bar = charts.hbar(
+        [s["state"] for s in data["states"]],
+        [float(s["total_amt"]) for s in data["states"]],
+        value_format="${:,.0f}",
         width=CARD_WIDTH,
+        label_width=90,
     )
 
-    borough_table = _table(
+    category_table = _table(
         [
-            "Borough",
-            "Trips",
+            "Category",
+            "Txns",
             "Share",
-            "Revenue",
-            "Avg ticket",
-            "Avg miles",
-            "Avg minutes",
-            "Avg tip %",
+            "Fraud txns",
+            "Fraud rate",
+            "Total amt",
+            "Avg amt",
         ],
         [
             [
-                escape(b["pickup_borough"]),
-                f"{b['trips']:,}",
-                f"{b['trip_share_pct']:.1f}%",
-                f"${b['revenue']:,.0f}",
-                f"${b['avg_ticket']:.2f}",
-                f"{b['avg_distance_mi']:.2f}",
-                f"{b['avg_duration_min']:.1f}",
-                f"{b['avg_tip_pct']:.1f}%" if b["avg_tip_pct"] is not None else "-",
+                escape(c["category"]),
+                f"{c['txns']:,}",
+                f"{c['txn_share_pct']:.1f}%",
+                f"{c['fraud_txns']:,}",
+                f"{100 * c['fraud_rate']:.3f}%",
+                f"${c['total_amt']:,.0f}",
+                f"${c['avg_amt']:.2f}",
             ]
-            for b in boroughs
+            for c in categories
         ],
-        align_right={1, 2, 3, 4, 5, 6, 7},
+        align_right={1, 2, 3, 4, 5, 6},
     )
 
-    zone_table = _table(
-        ["Pickup zone", "Borough", "Trips", "Revenue", "Revenue / trip"],
+    merchant_table = _table(
+        ["Merchant", "Category", "Txns", "Fraud txns", "Fraud rate"],
         [
             [
-                escape(z["pickup_zone"]),
-                escape(z["pickup_borough"]),
-                f"{z['trips']:,}",
-                f"${z['revenue']:,.0f}",
-                f"${z['revenue_per_trip']:.2f}",
+                escape(m["merchant"]),
+                escape(m["category"]),
+                f"{m['txns']:,}",
+                f"{m['fraud_txns']:,}",
+                f"{m['fraud_rate_pct']:.1f}%",
             ]
-            for z in data["zones"]
+            for m in data["merchants"]
         ],
         align_right={2, 3, 4},
     )
@@ -380,49 +386,51 @@ def build_html(data: dict[str, Any], cfg: Config) -> str:
             label_width=190,
         )
         if data["quarantine"]
-        else '<p class="empty">no quarantined rows recorded</p>'
+        else '<p class="empty">no quarantined rows recorded (Sparkov is a clean synthetic feed)</p>'
     )
 
     stream_table = (
         _table(
-            ["Window start", "Borough", "Trips", "Revenue"],
+            ["Window start", "Category", "Txns", "Fraud txns", "Total amt"],
             [
                 [
                     escape(str(s["window_start"])),
-                    escape(s["pickup_borough"]),
-                    f"{s['trips']:,}",
-                    f"${s['revenue']:,.2f}",
+                    escape(s["category"]),
+                    f"{s['txns']:,}",
+                    f"{s['fraud_txns']:,}",
+                    f"${s['total_amt']:,.2f}",
                 ]
                 for s in data["stream"]
             ],
-            align_right={2, 3},
+            align_right={2, 3, 4},
         )
         if data["stream"]
         else STREAM_EMPTY
     )
 
-    daily_series = [charts.Series("trips", [float(d["trips"]) for d in data["daily"]], 0)]
+    daily_series = [
+        charts.Series("txns", [float(d["txns"]) for d in data["daily"]], 0),
+    ]
     daily_chart = charts.multiline(
-        [str(d["pickup_date"])[5:] for d in data["daily"]],
+        [str(d["trans_date"])[:10] for d in data["daily"]],
         daily_series,
         width=FULL_WIDTH,
         height=300,
-        y_label="trips per day",
+        y_label="transactions per day",
     )
 
     return render_page(
-        month=cfg.month,
         generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         contract_status=contracts.get("status", "UNKNOWN"),
         contract_counts=contracts,
         tiles=tile_html,
-        borough_bar=borough_bar,
-        borough_table=borough_table,
+        category_bar=category_bar,
+        category_table=category_table,
         hourly_chart=hourly_chart,
         daily_chart=daily_chart,
-        zone_bar=zone_bar,
-        zone_table=zone_table,
-        payment_bar=payment_bar,
+        merchant_bar=merchant_bar,
+        merchant_table=merchant_table,
+        state_bar=state_bar,
         freshness_table=freshness_table,
         contract_table=contract_table,
         failure_html=failure_html,

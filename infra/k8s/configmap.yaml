@@ -7,7 +7,7 @@ metadata:
   namespace: streamlake
 data:
   KAFKA_BOOTSTRAP: "kafka.streamlake.svc.cluster.local:9092"
-  KAFKA_TOPIC: "streamlake.trips"
+  KAFKA_TOPIC: "streamlake.transactions"
   ICEBERG_CATALOG_TYPE: "hadoop"
   ICEBERG_WAREHOUSE: "/data/warehouse"
   CONTRACT_MODE: "fail"
