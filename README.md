@@ -183,7 +183,7 @@ drop path for real, by interleaving producer and consumer:
    cosmetic: dropping the sink table and clearing the checkpoint alone is not enough, Kafka keeps
    every message a previous run sent, and without deleting the topic a second run replays that
    whole backlog on top of its own data and the reconciliation breaks. (This was caught by
-   actually running the script twice in a row during review, see `MISTAKES.md` #16/#17.)
+   actually running the script twice in a row during review, not by reading the code.)
 2. Start the consumer, subscribed against the now-empty topic.
 3. Produce an on-time batch and wait for its micro-batch to commit, which is what advances the
    watermark to `max(event_ts seen) - 2 minutes`.
@@ -221,7 +221,7 @@ Getting the *counting* right took a second pass of its own: the first version of
 reconciliation script misread which JSON field on which Spark state operator meant "duplicate
 removed" versus "dropped for lateness" (both live on the same operator, split by field name, not
 operator name). Found by dumping the raw progress JSON from a real run instead of trusting memory
-of the Spark docs, see `MISTAKES.md` #16.
+of the Spark docs.
 
 ---
 
@@ -300,7 +300,7 @@ S3A handler, a `hadoop`-type Iceberg catalog still uses **Hadoop's** filesystem,
 `S3FileIO`, for namespace and table-directory operations, a different client with its own
 credentials (`spark.hadoop.fs.s3a.*`, set by `_hadoop_s3a_conf()` in `src/streamlake/spark.py`).
 Skip either piece and the run gets partway before failing with a confusingly unrelated-looking
-error, see `MISTAKES.md` #14 for the full story.
+error that points nowhere near the missing jar.
 
 **The swap to real AWS S3 is the same variables, pointed differently:**
 
