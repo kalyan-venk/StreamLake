@@ -49,18 +49,75 @@ jobs:
           PYTHONPATH: src
         run: .venv/bin/pytest -q
 
-      # Parses every model, test and macro against the real adapter without touching data.
-      - name: dbt parse
-        run: |
-          .venv/bin/dbt parse \
-            --project-dir dbt/streamlake --profiles-dir dbt/streamlake
-
       # The contracts are the interface the whole pipeline is written against; a typo in one is
       # a runtime failure three hops deep, so it gets caught here instead.
       - name: Contract specs load
         env:
           PYTHONPATH: src
         run: .venv/bin/python -m streamlake contracts
+
+  batch-e2e:
+    name: batch pipeline + dbt build, against a real sample
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv venv --python 3.12 .venv
+          VIRTUAL_ENV=.venv uv pip install -e ".[dev]"
+
+      # Iceberg's runtime jar is resolved from Maven on first use and lives outside the uv cache
+      # above; caching it here means only the first run on a given jar version pays for it.
+      - name: Cache Ivy (Iceberg jar resolution)
+        uses: actions/cache@v4
+        with:
+          path: ~/.ivy2
+          key: ivy2-${{ runner.os }}-iceberg-spark-runtime-4.0_2.13-1.11.0
+
+      # Runs bronze -> silver -> gold -> export -> warehouse-load against the small, deterministic
+      # sample in tests/fixtures/ci_sample/ (see scripts/make_ci_sample.py), not the real ~506 MB
+      # download: nobody has ever watched this run in CI, so every number in the README has been
+      # hand-verified only. This is what makes a broken pipeline actually turn CI red, including
+      # the write-audit-publish path in batch/silver.py: the contracts it runs are real, against
+      # real data, not `dbt parse`'s syntax check or a mocked contract report.
+      - name: Run the batch pipeline against the CI sample
+        env:
+          TZ: UTC
+          PYTHONPATH: src
+          RAW_DIR: tests/fixtures/ci_sample
+          CONTRACTS_DIR: conf/contracts-ci
+        run: |
+          .venv/bin/python -m streamlake bronze
+          .venv/bin/python -m streamlake silver
+          .venv/bin/python -m streamlake gold
+          .venv/bin/python -m streamlake export
+          .venv/bin/python -m streamlake warehouse-load
+          .venv/bin/python -m streamlake summary
+
+      # Runs every model and every data test against the DuckDB the step above just loaded, not
+      # just a syntax check against an empty schema.
+      - name: dbt build
+        run: |
+          .venv/bin/dbt build \
+            --project-dir dbt/streamlake --profiles-dir dbt/streamlake
 
   infra:
     name: terraform + manifests validate
