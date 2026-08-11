@@ -1,0 +1,54 @@
+# CI copy of conf/contracts/stream_txn_metrics_1m.yml, byte-identical: this table's bounds do not
+# depend on dataset scale, so the CI sample run is held to the same contract as production.
+name: stream_txn_metrics_1m
+dataset: lakehouse.stream.txn_metrics_1m
+layer: stream
+owner: data-platform
+description: >
+  Per-minute windowed KPIs from the Kafka arm. Streaming contracts are checked per micro-batch,
+  inside foreachBatch, before the batch is committed, which is the streaming equivalent of
+  "fail before anyone downstream trusts it". Freshness here IS wall-clock: a stream that stops
+  advancing is the failure mode you actually care about.
+
+schema:
+  strict: true
+  columns:
+    - name: window_start
+      type: timestamp
+      nullable: false
+    - name: window_end
+      type: timestamp
+      nullable: false
+    - name: category
+      type: string
+      nullable: false
+    - name: txns
+      type: bigint
+      nullable: false
+    - name: fraud_txns
+      type: bigint
+      nullable: false
+    - name: total_amt
+      type: double
+      nullable: false
+    - name: avg_amt
+      type: double
+    - name: updated_at
+      type: timestamp
+      nullable: false
+
+checks:
+  - type: unique
+    columns: [window_start, category]
+    description: >
+      One row per window per category. This is the assertion that proves the dedup worked: with
+      at-least-once delivery and no dedup, a replayed event lands in a second row for the same
+      window.
+  - type: expression
+    expr: window_end > window_start
+  - type: expression
+    expr: txns > 0
+  - type: expression
+    expr: fraud_txns <= txns
+  - type: row_count
+    min: 1

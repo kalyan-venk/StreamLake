@@ -1,0 +1,36 @@
+# CI copy of conf/contracts/bronze_category_ref.yml, byte-identical: this table's bounds do not
+# depend on dataset scale, so the CI sample run is held to the same contract as production.
+name: bronze_category_ref
+dataset: lakehouse.bronze.category_ref_raw
+layer: bronze
+owner: data-platform
+description: >
+  A small, hand-authored reference that maps each of Sparkov's 14 merchant categories to a
+  channel (online / in-person / general), derived from the `_net` / `_pos` suffix convention
+  Sparkov's own category names use. Worth a contract because a silently truncated 14-row file
+  would not fail any job, it would just turn transactions into a null channel and quietly break
+  the category dimension join.
+
+schema:
+  strict: true
+  columns:
+    - name: category
+      type: string
+      nullable: false
+    - name: channel
+      type: string
+      nullable: false
+
+checks:
+  - type: row_count
+    min: 14
+    max: 14
+    description: Sparkov ships exactly 14 categories; a different count means the reference is stale.
+
+  - type: unique
+    columns: [category]
+    description: category is the join key for the dimension enrichment.
+
+  - type: accepted_values
+    column: channel
+    values: ["online", "in_person", "general"]

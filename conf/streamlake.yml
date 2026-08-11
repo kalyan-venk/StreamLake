@@ -6,7 +6,9 @@ project: streamlake
 environment: ${STREAMLAKE_ENV:local}
 
 paths:
-  raw: data/raw
+  # Overridable so CI can point this at the small committed sample in tests/fixtures/ci_sample/
+  # instead of the real ~506 MB download (see scripts/make_ci_sample.py).
+  raw: ${RAW_DIR:data/raw}
   curated: data/curated
   reports: _reports
   checkpoints: checkpoints
@@ -79,7 +81,9 @@ stream:
   run_seconds: ${STREAM_RUN_SECONDS:120}
 
 contracts:
-  dir: conf/contracts
+  # Overridable so CI can validate the small sample run against conf/contracts-ci/, whose
+  # row-count bounds are calibrated to that sample instead of the real ~1.85M-row dataset.
+  dir: ${CONTRACTS_DIR:conf/contracts}
   # 'fail' aborts the task (and therefore the Airflow DAG); 'warn' only records the breach.
   on_violation: ${CONTRACT_MODE:fail}
 

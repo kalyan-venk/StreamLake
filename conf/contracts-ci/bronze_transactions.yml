@@ -1,0 +1,74 @@
+# CI copy of conf/contracts/bronze_transactions.yml. Identical except the row_count bound below:
+# CI runs the pipeline against the small committed sample in tests/fixtures/ci_sample/ (see
+# scripts/make_ci_sample.py), not the real ~1.85M-row download, so the real bound would fail
+# every CI run regardless of whether the pipeline is actually broken. Everything else (schema,
+# the other checks) is the same contract the real data has to pass.
+name: bronze_transactions
+dataset: lakehouse.bronze.transactions_raw
+layer: bronze
+owner: data-platform
+description: >
+  The landing contract. Bronze is a faithful copy of what Sparkov published, so this contract
+  asserts almost nothing about data *quality*, it asserts that we received the file we expected:
+  the right columns, the right types, a plausible number of rows, and timestamps that actually
+  cover the period we asked for. If this fails, the problem is upstream, not in our code.
+
+schema:
+  strict: false
+  columns:
+    - name: trans_num
+      type: string
+      nullable: false
+      description: Sparkov's own natural, globally unique event id (32 hex chars)
+    - name: trans_date_trans_time
+      type: timestamp
+      description: >
+        Sparkov publishes a zone-less "yyyy-MM-dd HH:mm:ss" string; Spark's CSV schema inference
+        recognises the shape and reads it straight in as a timestamp.
+    - name: cc_num
+      type: bigint
+    - name: merchant
+      type: string
+    - name: category
+      type: string
+    - name: amt
+      type: double
+    - name: is_fraud
+      type: int
+    - name: unix_time
+      type: int
+    - name: source_file
+      type: string
+      nullable: false
+    - name: source_split
+      type: string
+      nullable: false
+      description: which downloaded file the row came from, train or test
+    - name: batch_id
+      type: string
+      nullable: false
+    - name: ingested_at
+      type: timestamp
+      nullable: false
+
+checks:
+  - type: row_count
+    min: 3000
+    max: 6000
+    description: >
+      The CI sample (tests/fixtures/ci_sample/) is currently 4,309 rows; this just guards
+      against a badly regenerated sample, not the exact count.
+
+  - type: unique
+    columns: [trans_num]
+    severity: warn
+    description: >
+      Sparkov's train/test split is date-disjoint so this should always pass; warn rather than
+      fail because silver is the layer that guarantees one row per transaction either way.
+
+  - type: freshness
+    column: trans_date_trans_time
+    max_age: 3 days
+    description: >
+      Measured against the end of the period this dataset claims to cover (2021-01-01), not wall
+      clock. Asserts the file actually contains the period it claims to.
