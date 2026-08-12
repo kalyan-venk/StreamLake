@@ -106,6 +106,13 @@ def _cmd_consume(args: argparse.Namespace) -> object:
     return consumer.run(run_seconds=args.run_seconds)
 
 
+@command("score-stream", "score Kafka events through the fraud model into the decision table")
+def _cmd_score_stream(args: argparse.Namespace) -> object:
+    from streamlake.stream import scorer
+
+    return scorer.run(run_seconds=args.run_seconds)
+
+
 @command("dashboard", "render the static BI dashboard from the warehouse")
 def _cmd_dashboard(args: argparse.Namespace) -> object:
     from streamlake.dashboard import build
@@ -185,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
             sub.add_argument("--duplicate-rate", type=float, default=None, dest="duplicate_rate")
             sub.add_argument("--late-rate", type=float, default=None, dest="late_rate")
             sub.add_argument("--label", default="producer", dest="label")
-        if name == "consume":
+        if name in ("consume", "score-stream"):
             sub.add_argument("--run-seconds", type=int, default=None, dest="run_seconds")
         if name == "stream-check":
             sub.add_argument(

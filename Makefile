@@ -96,9 +96,21 @@ consume: ## run the streaming consumer for a bounded window
 
 stream: kafka-up produce consume ## Layer 2 end to end
 
+.PHONY: train-scorer score-demo score-stream score
+train-scorer: ## train the real-time fraud scorer from the curated silver export
+	$(PY) scripts/train_scorer.py
+
+score-demo: ## in-process proof: replay curated events through the scorer, print decisions
+	$(PY) scripts/demo_realtime_scoring.py
+
+score-stream: ## run the Spark Structured Streaming scorer against the Kafka topic
+	$(STREAMLAKE) score-stream
+
+score: kafka-up produce score-stream ## real-time scoring path end to end (needs a trained model)
+
 # --- layer 3: serving ----------------------------------------------------------------------
 
-.PHONY: dashboard contracts summary
+.PHONY: dashboard contracts summary forecast tune-fourier-k
 dashboard: ## render the static BI dashboard
 	$(STREAMLAKE) dashboard
 
@@ -107,6 +119,14 @@ contracts: ## list every contract and the assertions it makes
 
 summary: ## roll the latest contract reports into one summary
 	$(PY) -m streamlake.contracts.summary
+
+forecast: ## build the daily series from gold and backtest SARIMA vs seasonal-naive
+	$(PY) forecast/build_series.py
+	$(PY) forecast/backtest.py
+
+tune-fourier-k: ## reproduce the Fourier-K selection sweep on a training-only validation split
+	$(PY) forecast/build_series.py
+	$(PY) forecast/tune_fourier_k.py
 
 # --- infrastructure ------------------------------------------------------------------------
 
